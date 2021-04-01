@@ -6,6 +6,7 @@ const isDigit = utils.isDigit;
 
 const LObject = union(enum) {
     Fixnum: i64,
+    Boolean: bool,
 };
 
 const Parser = struct {
@@ -59,6 +60,18 @@ const Parser = struct {
         return LObject{ .Fixnum = fixnum };
     }
 
+    fn readBoolean(self: *Parser) !LObject {
+        _ = self.readCharacter();
+        const nextChar = self.readCharacter() orelse return error.UnexpectedValue;
+        const boolean = switch (nextChar) {
+            't' => true,
+            'f' => false,
+            else => return error.UnexpectedValue,
+        };
+
+        return LObject{ .Boolean = boolean };
+    }
+
     fn readSexp(self: *Parser) !LObject {
         self.eatWhitespace();
         const char = self.peek() orelse return error.UnexpectedEndOfContent;
@@ -69,6 +82,12 @@ const Parser = struct {
                 return error.UnexpectedValue;
             }
             return fixnum;
+        } else if (char == '#') {
+            const boolean = self.readBoolean();
+            if (!self.isDone()) {
+                return error.UnexpectedValue;
+            }
+            return boolean;
         } else {
             return error.UnexpectedValue;
         }
@@ -115,8 +134,8 @@ fn printSexp(sexp: LObject) void {
         .Fixnum => |num| {
             std.debug.print("{}\n", .{num});
         },
-        // else => {
-        //     std.debug.print("", .{});
-        // },
+        .Boolean => |boolean| {
+           std.debug.print("{}\n", .{boolean});
+        },
     }
 }
