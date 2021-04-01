@@ -3,14 +3,17 @@ const zinput = @import("zinput");
 const utils = @import("utils.zig");
 const isWhitespace = utils.isWhitespace;
 const isDigit = utils.isDigit;
+const isSymbolStartCharacter = utils.isSymbolStartCharacter;
+const isDelimiter = utils.isDelimiter;
 
 const LObject = union(enum) {
     Fixnum: i64,
     Boolean: bool,
+    Symbol: []const u8,
 };
 
 const Parser = struct {
-    input: []u8,
+    input: []const u8,
     index: u8 = 0,
 
     fn isDone(self: *Parser) bool {
@@ -75,11 +78,28 @@ const Parser = struct {
         return LObject{ .Boolean = boolean };
     }
 
+    pub fn readSymbol(self: *Parser) !LObject {
+        const startIndex = self.index;
+        while (!self.isDone() and !isDelimiter(self.peek().?)) {
+            _ = self.readCharacter();
+        }
+        const endIndex = self.index;
+
+        const symbol = self.input[startIndex..endIndex];
+        return LObject{ .Symbol = symbol };
+    }
+
     fn readSexp(self: *Parser) !LObject {
         self.eatWhitespace();
         const char = self.peek() orelse return error.UnexpectedEndOfContent;
 
-        if (isDigit(char) or char == '~') {
+        if (isSymbolStartCharacter(char)) {
+            const symbol = self.readSymbol();
+            if (!self.isDone()) {
+                return error.UnexpectedValue;
+            }
+            return symbol;
+        } else if (isDigit(char) or char == '~') {
             const isNegative = char == '~';
             const fixnum = self.readFixnum(isNegative);
             if (!self.isDone()) {
@@ -141,5 +161,8 @@ fn printSexp(sexp: LObject) void {
         .Boolean => |boolean| {
            std.debug.print("{}\n", .{boolean});
         },
+        .Symbol => |symbol| {
+            std.debug.print("{s}\n", .{symbol});
+        }
     }
 }
