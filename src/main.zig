@@ -91,22 +91,13 @@ const Parser = struct {
 
         if (utils.isSymbolStartCharacter(char)) {
             const symbol = self.readSymbol();
-            if (!self.isDone()) {
-                return error.UnexpectedValue;
-            }
             return symbol;
         } else if (utils.isDigit(char) or char == '~') {
             const isNegative = char == '~';
             const fixnum = self.readFixnum(isNegative);
-            if (!self.isDone()) {
-                return error.UnexpectedValue;
-            }
             return fixnum;
         } else if (char == '#') {
             const boolean = self.readBoolean();
-            if (!self.isDone()) {
-                return error.UnexpectedValue;
-            }
             return boolean;
         } else {
             return error.UnexpectedValue;
@@ -148,7 +139,12 @@ pub fn main() anyerror!void {
         const printedSexp = printSexp(allocator, sexp) catch continue;
         defer allocator.free(printedSexp);
 
-        std.debug.print("{s}\n", .{printedSexp});
+        parser.eatWhitespace();
+        if (!parser.isDone()) {
+            std.debug.print("Unrecognized value.\n", .{});
+        } else {
+            std.debug.print("{s}\n", .{printedSexp});
+        }
     }
 }
 
