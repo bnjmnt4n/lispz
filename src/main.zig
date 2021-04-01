@@ -1,5 +1,8 @@
 const std = @import("std");
 const zinput = @import("zinput");
+const utils = @import("utils.zig");
+const isWhitespace = utils.isWhitespace;
+const isDigit = utils.isDigit;
 
 const LObject = union(enum) {
     Fixnum: i64,
@@ -116,18 +119,4 @@ fn printSexp(sexp: LObject) void {
         //     std.debug.print("", .{});
         // },
     }
-}
-
-fn isWhitespace(char: u8) bool {
-    return switch (char) {
-        ' ', '\t', '\n' => true,
-        else => false,
-    };
-}
-
-fn isDigit(char: u8) bool {
-    return switch (char) {
-        '0'...'9' => true,
-        else => false,
-    };
 }
