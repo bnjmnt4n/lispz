@@ -49,14 +49,17 @@ const Parser = struct {
         }
     }
 
-    fn readFixnum(self: *Parser) !LObject {
+    fn readFixnum(self: *Parser, isNegative: bool) !LObject {
+        if (isNegative) _ = self.readCharacter();
+
         const startIndex = self.index;
         while (!self.isDone() and isDigit(self.peek().?)) {
             _ = self.readCharacter();
         }
         const endIndex = self.index;
 
-        const fixnum = try std.fmt.parseInt(i64, self.input[startIndex..endIndex], 10);
+        const num = try std.fmt.parseInt(i64, self.input[startIndex..endIndex], 10);
+        const fixnum = if (isNegative) -num else num;
         return LObject{ .Fixnum = fixnum };
     }
 
@@ -76,8 +79,9 @@ const Parser = struct {
         self.eatWhitespace();
         const char = self.peek() orelse return error.UnexpectedEndOfContent;
 
-        if (isDigit(char)) {
-            const fixnum = self.readFixnum();
+        if (isDigit(char) or char == '~') {
+            const isNegative = char == '~';
+            const fixnum = self.readFixnum(isNegative);
             if (!self.isDone()) {
                 return error.UnexpectedValue;
             }
