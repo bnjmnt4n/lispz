@@ -1,10 +1,6 @@
 const std = @import("std");
 const zinput = @import("zinput");
 const utils = @import("utils.zig");
-const isWhitespace = utils.isWhitespace;
-const isDigit = utils.isDigit;
-const isSymbolStartCharacter = utils.isSymbolStartCharacter;
-const isDelimiter = utils.isDelimiter;
 
 const LObject = union(enum) {
     Fixnum: i64,
@@ -45,7 +41,7 @@ const Parser = struct {
     fn eatWhitespace(self: *Parser) void {
         const char = self.readCharacter() orelse return;
 
-        if (isWhitespace(char)) {
+        if (utils.isWhitespace(char)) {
             self.eatWhitespace();
         } else {
             self.unreadCharacter();
@@ -56,7 +52,7 @@ const Parser = struct {
         if (isNegative) _ = self.readCharacter();
 
         const startIndex = self.index;
-        while (!self.isDone() and isDigit(self.peek().?)) {
+        while (!self.isDone() and utils.isDigit(self.peek().?)) {
             _ = self.readCharacter();
         }
         const endIndex = self.index;
@@ -80,7 +76,7 @@ const Parser = struct {
 
     pub fn readSymbol(self: *Parser) !LObject {
         const startIndex = self.index;
-        while (!self.isDone() and !isDelimiter(self.peek().?)) {
+        while (!self.isDone() and !utils.isDelimiter(self.peek().?)) {
             _ = self.readCharacter();
         }
         const endIndex = self.index;
@@ -93,13 +89,13 @@ const Parser = struct {
         self.eatWhitespace();
         const char = self.peek() orelse return error.UnexpectedEndOfContent;
 
-        if (isSymbolStartCharacter(char)) {
+        if (utils.isSymbolStartCharacter(char)) {
             const symbol = self.readSymbol();
             if (!self.isDone()) {
                 return error.UnexpectedValue;
             }
             return symbol;
-        } else if (isDigit(char) or char == '~') {
+        } else if (utils.isDigit(char) or char == '~') {
             const isNegative = char == '~';
             const fixnum = self.readFixnum(isNegative);
             if (!self.isDone()) {
@@ -149,20 +145,17 @@ pub fn main() anyerror!void {
             continue;
         };
 
-        printSexp(sexp);
+        const printedSexp = printSexp(allocator, sexp) catch continue;
+        defer allocator.free(printedSexp);
+
+        std.debug.print("{s}\n", .{printedSexp});
     }
 }
 
-fn printSexp(sexp: LObject) void {
-    switch (sexp) {
-        .Fixnum => |num| {
-            std.debug.print("{}\n", .{num});
-        },
-        .Boolean => |boolean| {
-           std.debug.print("{}\n", .{boolean});
-        },
-        .Symbol => |symbol| {
-            std.debug.print("{s}\n", .{symbol});
-        }
-    }
+fn printSexp(allocator: *std.mem.Allocator, sexp: LObject) ![]const u8 {
+    return switch (sexp) {
+        .Fixnum => |num| try std.fmt.allocPrint(allocator, "{}", .{num}),
+        .Boolean => |boolean| try std.fmt.allocPrint(allocator, "{}", .{boolean}),
+        .Symbol => |symbol| try std.fmt.allocPrint(allocator, "{s}", .{symbol}),
+    };
 }
