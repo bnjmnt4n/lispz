@@ -12,6 +12,10 @@ const Parser = struct {
     input: []const u8,
     index: u8 = 0,
 
+    pub fn init(string: []const u8) Parser {
+        return Parser{ .input = string };
+    }
+
     fn isDone(self: *Parser) bool {
         return self.index >= self.input.len;
     }
@@ -74,7 +78,7 @@ const Parser = struct {
         return LObject{ .Boolean = boolean };
     }
 
-    pub fn readSymbol(self: *Parser) !LObject {
+    fn readSymbol(self: *Parser) !LObject {
         const startIndex = self.index;
         while (!self.isDone() and !utils.isDelimiter(self.peek().?)) {
             _ = self.readCharacter();
@@ -90,15 +94,12 @@ const Parser = struct {
         const char = self.peek() orelse return error.UnexpectedEndOfContent;
 
         if (utils.isSymbolStartCharacter(char)) {
-            const symbol = self.readSymbol();
-            return symbol;
+            return self.readSymbol();
         } else if (utils.isDigit(char) or char == '~') {
             const isNegative = char == '~';
-            const fixnum = self.readFixnum(isNegative);
-            return fixnum;
+            return self.readFixnum(isNegative);
         } else if (char == '#') {
-            const boolean = self.readBoolean();
-            return boolean;
+            return self.readBoolean();
         } else {
             return error.UnexpectedValue;
         }
@@ -125,7 +126,7 @@ pub fn main() anyerror!void {
         };
         defer allocator.free(string);
 
-        var parser = Parser{ .input = string };
+        var parser = Parser.init(string);
         const sexp = parser.readSexp() catch |err| {
             switch (err) {
                 error.UnexpectedEndOfContent => std.debug.print("No value provided.\n", .{}),
