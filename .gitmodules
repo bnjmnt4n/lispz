@@ -1,0 +1,3 @@
+[submodule "dependencies/zinput"]
+	path = dependencies/zinput
+	url = https://github.com/ziglibs/zinput.git
