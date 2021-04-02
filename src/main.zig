@@ -199,6 +199,39 @@ pub fn main() anyerror!void {
     }
 }
 
+fn bind(allocator: *std.mem.Allocator, name: []const u8, value: *LObject, environment: *LObject) !*LObject {
+    var name = try allocator.create(LObject);
+    name.* = LObject{ .Symbol = name };
+
+    var nameValuePair = try allocator.create(LObject);
+    nameValuePair.* = LObject{ .Pair = .{ name, value } };
+
+    var newEnvironment = try allocator.create(LObject);
+    newEnvironment.* = LObject{ .Pair = .{ nameValuePair, environment } };
+    return newEnvironment;
+}
+
+fn lookup(name: []const u8, environment: *LObject) !*LObject {
+    switch (environment.*) {
+        .Nil => return error.NotFound,
+        .Pair => |slice| {
+            switch (slice[0].*) {
+                .Pair => |nameValuePair| {
+                    switch (nameValuePair[0].*) {
+                        .Symbol => |string| {
+                            if (std.mem.eql(u8, name, string)) return nameValuePair[1];
+                            return lookup(name, slice[1]);
+                        },
+                        else => unreachable,
+                    }
+                },
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
 const PrinterError = error{UnexpectedValue} || std.fmt.AllocPrintError;
 
 fn printSexp(allocator: *std.mem.Allocator, sexp: LObject) PrinterError![]const u8 {
@@ -222,7 +255,7 @@ fn printPair(allocator: *std.mem.Allocator, pair: LObject) PrinterError![]const 
                 try printSexp(allocator, slice[1].*),
             });
         },
-        else => error.UnexpectedValue,
+        else => unreachable,
     };
 }
 
@@ -239,7 +272,7 @@ fn printList(allocator: *std.mem.Allocator, list: LObject) PrinterError![]const 
 
             return try std.fmt.allocPrint(allocator, "{s}{s}", .{ car, cdr });
         },
-        else => error.UnexpectedValue,
+        else => unreachable,
     };
 }
 
