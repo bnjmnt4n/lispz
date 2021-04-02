@@ -6,21 +6,32 @@ const LObject = union(enum) {
     Fixnum: i64,
     Boolean: bool,
     Symbol: []const u8,
+    Nil,
+    Pair: [2]*const LObject,
 };
 
+// Note: recursive functions cannot have inferred error sets.
+// See https://github.com/ziglang/zig/issues/2971.
+const ParserError = error{
+    UnexpectedValue,
+    UnexpectedEndOfContent,
+} || std.fmt.ParseIntError;
+
 const Parser = struct {
+    const Self = @This();
+
     input: []const u8,
     index: u8 = 0,
 
     pub fn init(string: []const u8) Parser {
-        return Parser{ .input = string };
+        return Self{ .input = string };
     }
 
-    fn isDone(self: *Parser) bool {
+    fn isDone(self: Self) bool {
         return self.index >= self.input.len;
     }
 
-    fn peek(self: *Parser) ?u8 {
+    fn peek(self: Self) ?u8 {
         if (self.isDone()) {
             return null;
         }
@@ -28,7 +39,7 @@ const Parser = struct {
         return self.input[self.index];
     }
 
-    fn readCharacter(self: *Parser) ?u8 {
+    fn readCharacter(self: *Self) ?u8 {
         if (self.isDone()) {
             return null;
         }
@@ -38,11 +49,11 @@ const Parser = struct {
         return char;
     }
 
-    fn unreadCharacter(self: *Parser) void {
+    fn unreadCharacter(self: *Self) void {
         self.index = if (self.index <= 0) 0 else self.index - 1;
     }
 
-    fn eatWhitespace(self: *Parser) void {
+    fn eatWhitespace(self: *Self) void {
         const char = self.readCharacter() orelse return;
 
         if (utils.isWhitespace(char)) {
@@ -52,10 +63,10 @@ const Parser = struct {
         }
     }
 
-    fn readFixnum(self: *Parser, isNegative: bool) !LObject {
+    fn readFixnum(self: *Self, isNegative: bool) ParserError!LObject {
         if (isNegative) _ = self.readCharacter();
 
-        const startIndex = self.index;
+        const startIndex = self.index - 1;
         while (!self.isDone() and utils.isDigit(self.peek().?)) {
             _ = self.readCharacter();
         }
@@ -66,8 +77,7 @@ const Parser = struct {
         return LObject{ .Fixnum = fixnum };
     }
 
-    fn readBoolean(self: *Parser) !LObject {
-        _ = self.readCharacter();
+    fn readBoolean(self: *Self) ParserError!LObject {
         const nextChar = self.readCharacter() orelse return error.UnexpectedValue;
         const boolean = switch (nextChar) {
             't' => true,
@@ -78,8 +88,8 @@ const Parser = struct {
         return LObject{ .Boolean = boolean };
     }
 
-    fn readSymbol(self: *Parser) !LObject {
-        const startIndex = self.index;
+    fn readSymbol(self: *Self) ParserError!LObject {
+        const startIndex = self.index - 1;
         while (!self.isDone() and !utils.isDelimiter(self.peek().?)) {
             _ = self.readCharacter();
         }
@@ -89,15 +99,33 @@ const Parser = struct {
         return LObject{ .Symbol = symbol };
     }
 
-    fn readSexp(self: *Parser) !LObject {
+    fn readList(self: *Self) ParserError!LObject {
         self.eatWhitespace();
-        const char = self.peek() orelse return error.UnexpectedEndOfContent;
+
+        const nextChar = self.peek() orelse return error.UnexpectedEndOfContent;
+
+        if (nextChar == ')') {
+            _ = self.readCharacter();
+            return LObject.Nil;
+        }
+
+        const car = try self.readSexp();
+        const cdr = try self.readList();
+
+        return LObject{ .Pair = .{ &car, &cdr } };
+    }
+
+    fn readSexp(self: *Self) ParserError!LObject {
+        self.eatWhitespace();
+        const char = self.readCharacter() orelse return error.UnexpectedEndOfContent;
 
         if (utils.isSymbolStartCharacter(char)) {
             return self.readSymbol();
         } else if (utils.isDigit(char) or char == '~') {
             const isNegative = char == '~';
             return self.readFixnum(isNegative);
+        } else if (char == '(') {
+            return self.readList();
         } else if (char == '#') {
             return self.readBoolean();
         } else {
@@ -124,7 +152,6 @@ pub fn main() anyerror!void {
                 return err;
             },
         };
-        defer allocator.free(string);
 
         var parser = Parser.init(string);
         const sexp = parser.readSexp() catch |err| {
@@ -138,7 +165,6 @@ pub fn main() anyerror!void {
         };
 
         const printedSexp = printSexp(allocator, sexp) catch continue;
-        defer allocator.free(printedSexp);
 
         parser.eatWhitespace();
         if (!parser.isDone()) {
@@ -149,10 +175,42 @@ pub fn main() anyerror!void {
     }
 }
 
-fn printSexp(allocator: *std.mem.Allocator, sexp: LObject) ![]const u8 {
+const PrinterError = error{UnexpectedValue} || std.fmt.AllocPrintError;
+
+fn printSexp(allocator: *std.mem.Allocator, sexp: LObject) PrinterError![]const u8 {
     return switch (sexp) {
         .Fixnum => |num| try std.fmt.allocPrint(allocator, "{}", .{num}),
         .Boolean => |boolean| try std.fmt.allocPrint(allocator, "{}", .{boolean}),
         .Symbol => |symbol| try std.fmt.allocPrint(allocator, "{s}", .{symbol}),
+        .Nil => try std.fmt.allocPrint(allocator, "nil", .{}),
+        .Pair => |slice| {
+            const content = if (isList(sexp)) printList(allocator, sexp) else printPair(allocator, sexp);
+            return try std.fmt.allocPrint(allocator, "({s})", .{content});
+        },
+    };
+}
+
+fn printPair(allocator: *std.mem.Allocator, pair: LObject) PrinterError![]const u8 {
+    return switch (pair) {
+        .Pair => |slice| {
+            return try std.fmt.allocPrint(allocator, "{s} . {s}", .{
+                try printSexp(allocator, slice[0].*),
+                try printSexp(allocator, slice[1].*),
+            });
+        },
+        else => error.UnexpectedValue,
+    };
+}
+
+fn printList(allocator: *std.mem.Allocator, list: LObject) ![]const u8 {
+    // TODO
+    return "list";
+}
+
+fn isList(pair: LObject) bool {
+    return switch (pair) {
+        .Nil => true,
+        .Pair => |slice| isList(slice[1].*),
+        else => false,
     };
 }
