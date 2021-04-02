@@ -7,7 +7,8 @@ const LObject = union(enum) {
     Boolean: bool,
     Symbol: []const u8,
     Nil,
-    Pair: [2]*const LObject,
+    // TODO: figure out the differences between *const LObject and *LObject.
+    Pair: [2]*LObject,
 
     fn getValue(self: LObject, comptime tag: std.meta.Tag(LObject)) ?utils.getUnionFieldType(LObject, tag) {
         return switch (self) {
@@ -173,6 +174,9 @@ pub fn main() anyerror!void {
 
     const allocator = &arena.allocator;
 
+    var environmentValue: LObject = LObject.Nil;
+    var environment = &environmentValue;
+
     // Read-Eval-Print-Loop
     while (true) {
         const string = zinput.askString(allocator, "> ", 128) catch |err| switch (err) {
@@ -187,7 +191,7 @@ pub fn main() anyerror!void {
         };
 
         var parser = Parser.init(allocator, string);
-        const sexp = parser.getValue() catch |err| {
+        var sexp = parser.getValue() catch |err| {
             switch (err) {
                 error.UnexpectedEndOfContent => std.debug.print("No value provided.\n", .{}),
                 error.UnexpectedValue => std.debug.print("Unrecognized value.\n", .{}),
@@ -197,13 +201,54 @@ pub fn main() anyerror!void {
             continue;
         };
 
-        const printedSexp = printSexp(allocator, sexp) catch |err| {
+        const evalResult = evalSexp(&sexp, environment) catch |err| {
+            std.debug.print("Error evaluating value.\n", .{});
+            continue;
+        };
+
+        const evaluatedSexp = evalResult[0];
+        environment = evalResult[1];
+
+        const printedSexp = printSexp(allocator, evaluatedSexp.*) catch |err| {
             std.debug.print("Error printing value.\n", .{});
             continue;
         };
 
         std.debug.print("{s}\n", .{printedSexp});
     }
+}
+
+const EvaluationError = error{UnexpectedIfCondition};
+
+fn evalSexp(sexp: *LObject, environment: *LObject) EvaluationError![2]*LObject {
+    return switch (sexp.*) {
+        .Nil => .{ sexp, environment },
+        .Fixnum => .{ sexp, environment },
+        .Boolean => .{ sexp, environment },
+        .Symbol => .{ sexp, environment },
+        .Pair => |slice| blk: {
+            const defaultExpr = [2]*LObject { sexp, environment };
+
+            const ifSymbol = slice[0].getValue(.Symbol) orelse break :blk defaultExpr;
+            const nextPair = slice[1].getValue(.Pair) orelse break :blk defaultExpr;
+            var condition: *LObject = nextPair[0];
+            const nextPair2 = nextPair[1].getValue(.Pair) orelse break :blk defaultExpr;
+            const consequent = nextPair2[0];
+            const nextPair3 = nextPair2[1].getValue(.Pair) orelse break :blk defaultExpr;
+            const alternate = nextPair3[0];
+            const end = nextPair3[1].getValue(.Nil) orelse break :blk defaultExpr;
+
+            var result = try evalSexp(condition, environment);
+            const conditionValue = result[0].getValue(.Boolean) orelse return error.UnexpectedIfCondition;
+            const newEnvironment = result[1];
+            switch (conditionValue) {
+                true => break :blk [2]*LObject { consequent, newEnvironment },
+                false => break :blk [2]*LObject { alternate, newEnvironment },
+            }
+
+            break :blk defaultExpr;
+        },
+    };
 }
 
 fn bind(allocator: *std.mem.Allocator, name: []const u8, value: *LObject, environment: *LObject) !*LObject {
@@ -222,8 +267,8 @@ fn lookup(name: []const u8, environment: *LObject) !*LObject {
     switch (environment.*) {
         .Nil => return error.NotFound,
         .Pair => |slice| {
-            const nameValuePair = slice[0].*.getValue(.Pair) orelse unreachable;
-            const nameSymbol = nameValuePair[0].*.getValue(.Symbol) orelse unreachable;
+            const nameValuePair = slice[0].getValue(.Pair) orelse unreachable;
+            const nameSymbol = nameValuePair[0].getValue(.Symbol) orelse unreachable;
 
             if (std.mem.eql(u8, name, nameSymbol)) return nameValuePair[1];
             return lookup(name, slice[1]);
@@ -238,7 +283,7 @@ fn printSexp(allocator: *std.mem.Allocator, sexp: LObject) PrinterError![]const 
     return switch (sexp) {
         .Symbol => |symbol| try std.fmt.allocPrint(allocator, "{s}", .{symbol}),
         .Fixnum => |num| try std.fmt.allocPrint(allocator, "{}", .{num}),
-        .Boolean => |boolean| try std.fmt.allocPrint(allocator, "{}", .{boolean}),
+        .Boolean => |boolean| if (boolean) "#t" else "#f",
         .Nil => "nil",
         .Pair => {
             const content = if (isList(sexp))
