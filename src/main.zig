@@ -8,6 +8,13 @@ const LObject = union(enum) {
     Symbol: []const u8,
     Nil,
     Pair: [2]*const LObject,
+
+    fn getValue(self: LObject, comptime tag: std.meta.Tag(LObject)) ?utils.getUnionFieldType(LObject, tag) {
+        return switch (self) {
+            tag => @field(self, @tagName(tag)),
+            else => null,
+        };
+    }
 };
 
 // Note: recursive functions cannot have inferred error sets.
@@ -215,18 +222,11 @@ fn lookup(name: []const u8, environment: *LObject) !*LObject {
     switch (environment.*) {
         .Nil => return error.NotFound,
         .Pair => |slice| {
-            switch (slice[0].*) {
-                .Pair => |nameValuePair| {
-                    switch (nameValuePair[0].*) {
-                        .Symbol => |string| {
-                            if (std.mem.eql(u8, name, string)) return nameValuePair[1];
-                            return lookup(name, slice[1]);
-                        },
-                        else => unreachable,
-                    }
-                },
-                else => unreachable,
-            }
+            const nameValuePair = slice[0].*.getValue(.Pair) orelse unreachable;
+            const nameSymbol = nameValuePair[0].*.getValue(.Symbol) orelse unreachable;
+
+            if (std.mem.eql(u8, name, nameSymbol)) return nameValuePair[1];
+            return lookup(name, slice[1]);
         },
         else => unreachable,
     }
@@ -241,45 +241,41 @@ fn printSexp(allocator: *std.mem.Allocator, sexp: LObject) PrinterError![]const 
         .Boolean => |boolean| try std.fmt.allocPrint(allocator, "{}", .{boolean}),
         .Nil => "nil",
         .Pair => {
-            const content = if (isList(sexp)) (try printList(allocator, sexp)) else (try printPair(allocator, sexp));
+            const content = if (isList(sexp))
+                (try printList(allocator, sexp))
+            else
+                (try printPair(allocator, sexp));
             return try std.fmt.allocPrint(allocator, "({s})", .{content});
         },
     };
 }
 
-fn printPair(allocator: *std.mem.Allocator, pair: LObject) PrinterError![]const u8 {
-    return switch (pair) {
-        .Pair => |slice| {
-            return try std.fmt.allocPrint(allocator, "{s} . {s}", .{
-                try printSexp(allocator, slice[0].*),
-                try printSexp(allocator, slice[1].*),
-            });
-        },
-        else => unreachable,
-    };
+fn printPair(allocator: *std.mem.Allocator, sexp: LObject) PrinterError![]const u8 {
+    const slice = sexp.getValue(.Pair) orelse unreachable;
+
+    return try std.fmt.allocPrint(allocator, "{s} . {s}", .{
+        try printSexp(allocator, slice[0].*),
+        try printSexp(allocator, slice[1].*),
+    });
 }
 
-fn printList(allocator: *std.mem.Allocator, list: LObject) PrinterError![]const u8 {
-    return switch (list) {
-        .Pair => |slice| {
-            const car = try printSexp(allocator, slice[0].*);
+fn printList(allocator: *std.mem.Allocator, sexp: LObject) PrinterError![]const u8 {
+    const slice = sexp.getValue(.Pair) orelse unreachable;
+    const car = try printSexp(allocator, slice[0].*);
 
-            const cdr = switch (slice[1].*) {
-                .Nil => "",
-                .Pair => try std.fmt.allocPrint(allocator, " {s}", .{try printList(allocator, slice[1].*)}),
-                else => return error.UnexpectedValue,
-            };
-
-            return try std.fmt.allocPrint(allocator, "{s}{s}", .{ car, cdr });
-        },
+    const cdr = switch (slice[1].*) {
+        .Nil => "",
+        .Pair => try std.fmt.allocPrint(allocator, " {s}", .{try printList(allocator, slice[1].*)}),
         else => unreachable,
     };
+
+    return try std.fmt.allocPrint(allocator, "{s}{s}", .{ car, cdr });
 }
 
 fn isList(pair: LObject) bool {
     return switch (pair) {
         .Nil => true,
         .Pair => |slice| isList(slice[1].*),
-        else => false,
+        else => unreachable,
     };
 }
