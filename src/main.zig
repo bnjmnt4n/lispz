@@ -67,7 +67,7 @@ const Parser = struct {
         }
     }
 
-    fn readFixnum(self: *Self, isNegative: bool) ParserError!LObject {
+    fn readFixnum(self: *Self, isNegative: bool) ParserError!*LObject {
         if (isNegative) _ = self.readCharacter();
 
         const startIndex = self.index - 1;
@@ -81,10 +81,10 @@ const Parser = struct {
 
         var node = try self.allocator.create(LObject);
         node.* = LObject{ .Fixnum = fixnum };
-        return node.*;
+        return node;
     }
 
-    fn readBoolean(self: *Self) ParserError!LObject {
+    fn readBoolean(self: *Self) ParserError!*LObject {
         const nextChar = self.readCharacter() orelse return error.UnexpectedValue;
         const boolean = switch (nextChar) {
             't' => true,
@@ -94,10 +94,10 @@ const Parser = struct {
 
         var node = try self.allocator.create(LObject);
         node.* = LObject{ .Boolean = boolean };
-        return node.*;
+        return node;
     }
 
-    fn readSymbol(self: *Self) ParserError!LObject {
+    fn readSymbol(self: *Self) ParserError!*LObject {
         const startIndex = self.index - 1;
         while (!self.isDone() and !utils.isDelimiter(self.peek().?)) {
             _ = self.readCharacter();
@@ -107,10 +107,10 @@ const Parser = struct {
         const symbol = self.input[startIndex..endIndex];
         var node = try self.allocator.create(LObject);
         node.* = LObject{ .Symbol = symbol };
-        return node.*;
+        return node;
     }
 
-    fn readList(self: *Self) ParserError!LObject {
+    fn readList(self: *Self) ParserError!*LObject {
         self.eatWhitespace();
 
         const nextChar = self.peek() orelse return error.UnexpectedEndOfContent;
@@ -124,13 +124,13 @@ const Parser = struct {
             const car = try self.readSexp();
             const cdr = try self.readList();
 
-            node.* = LObject{ .Pair = .{ &car, &cdr } };
+            node.* = LObject{ .Pair = .{ car, cdr } };
         }
 
-        return node.*;
+        return node;
     }
 
-    fn readSexp(self: *Self) ParserError!LObject {
+    fn readSexp(self: *Self) ParserError!*LObject {
         self.eatWhitespace();
         const char = self.readCharacter() orelse return error.UnexpectedEndOfContent;
 
@@ -145,6 +145,17 @@ const Parser = struct {
             return self.readBoolean();
         } else {
             return error.UnexpectedValue;
+        }
+    }
+
+    fn getValue(self: *Self) ParserError!LObject {
+        const sexpPointer = try self.readSexp();
+
+        self.eatWhitespace();
+        if (!self.isDone()) {
+            return error.UnexpectedValue;
+        } else {
+            return sexpPointer.*;
         }
     }
 };
@@ -169,7 +180,7 @@ pub fn main() anyerror!void {
         };
 
         var parser = Parser.init(allocator, string);
-        const sexp = parser.readSexp() catch |err| {
+        const sexp = parser.getValue() catch |err| {
             switch (err) {
                 error.UnexpectedEndOfContent => std.debug.print("No value provided.\n", .{}),
                 error.UnexpectedValue => std.debug.print("Unrecognized value.\n", .{}),
@@ -179,14 +190,12 @@ pub fn main() anyerror!void {
             continue;
         };
 
-        const printedSexp = printSexp(allocator, sexp) catch continue;
+        const printedSexp = printSexp(allocator, sexp) catch |err| {
+            std.debug.print("Error printing value.\n", .{});
+            continue;
+        };
 
-        parser.eatWhitespace();
-        if (!parser.isDone()) {
-            std.debug.print("Unrecognized value.\n", .{});
-        } else {
-            std.debug.print("{s}\n", .{printedSexp});
-        }
+        std.debug.print("{s}\n", .{printedSexp});
     }
 }
 
