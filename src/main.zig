@@ -15,16 +15,20 @@ const LObject = union(enum) {
 const ParserError = error{
     UnexpectedValue,
     UnexpectedEndOfContent,
-} || std.fmt.ParseIntError;
+} || std.fmt.ParseIntError || std.mem.Allocator.Error;
 
 const Parser = struct {
     const Self = @This();
 
     input: []const u8,
     index: u8 = 0,
+    allocator: *std.mem.Allocator,
 
-    pub fn init(string: []const u8) Parser {
-        return Self{ .input = string };
+    pub fn init(allocator: *std.mem.Allocator, string: []const u8) Parser {
+        return Self{
+            .allocator = allocator,
+            .input = string,
+        };
     }
 
     fn isDone(self: Self) bool {
@@ -74,7 +78,10 @@ const Parser = struct {
 
         const num = try std.fmt.parseInt(i64, self.input[startIndex..endIndex], 10);
         const fixnum = if (isNegative) -num else num;
-        return LObject{ .Fixnum = fixnum };
+
+        var node = try self.allocator.create(LObject);
+        node.* = LObject{ .Fixnum = fixnum };
+        return node.*;
     }
 
     fn readBoolean(self: *Self) ParserError!LObject {
@@ -85,7 +92,9 @@ const Parser = struct {
             else => return error.UnexpectedValue,
         };
 
-        return LObject{ .Boolean = boolean };
+        var node = try self.allocator.create(LObject);
+        node.* = LObject{ .Boolean = boolean };
+        return node.*;
     }
 
     fn readSymbol(self: *Self) ParserError!LObject {
@@ -96,7 +105,9 @@ const Parser = struct {
         const endIndex = self.index;
 
         const symbol = self.input[startIndex..endIndex];
-        return LObject{ .Symbol = symbol };
+        var node = try self.allocator.create(LObject);
+        node.* = LObject{ .Symbol = symbol };
+        return node.*;
     }
 
     fn readList(self: *Self) ParserError!LObject {
@@ -104,15 +115,19 @@ const Parser = struct {
 
         const nextChar = self.peek() orelse return error.UnexpectedEndOfContent;
 
+        var node = try self.allocator.create(LObject);
+
         if (nextChar == ')') {
             _ = self.readCharacter();
-            return LObject.Nil;
+            node.* = LObject.Nil;
+        } else {
+            const car = try self.readSexp();
+            const cdr = try self.readList();
+
+            node.* = LObject{ .Pair = .{ &car, &cdr } };
         }
 
-        const car = try self.readSexp();
-        const cdr = try self.readList();
-
-        return LObject{ .Pair = .{ &car, &cdr } };
+        return node.*;
     }
 
     fn readSexp(self: *Self) ParserError!LObject {
@@ -153,7 +168,7 @@ pub fn main() anyerror!void {
             },
         };
 
-        var parser = Parser.init(string);
+        var parser = Parser.init(allocator, string);
         const sexp = parser.readSexp() catch |err| {
             switch (err) {
                 error.UnexpectedEndOfContent => std.debug.print("No value provided.\n", .{}),
@@ -179,12 +194,12 @@ const PrinterError = error{UnexpectedValue} || std.fmt.AllocPrintError;
 
 fn printSexp(allocator: *std.mem.Allocator, sexp: LObject) PrinterError![]const u8 {
     return switch (sexp) {
+        .Symbol => |symbol| try std.fmt.allocPrint(allocator, "{s}", .{symbol}),
         .Fixnum => |num| try std.fmt.allocPrint(allocator, "{}", .{num}),
         .Boolean => |boolean| try std.fmt.allocPrint(allocator, "{}", .{boolean}),
-        .Symbol => |symbol| try std.fmt.allocPrint(allocator, "{s}", .{symbol}),
-        .Nil => try std.fmt.allocPrint(allocator, "nil", .{}),
-        .Pair => |slice| {
-            const content = if (isList(sexp)) printList(allocator, sexp) else printPair(allocator, sexp);
+        .Nil => "nil",
+        .Pair => {
+            const content = if (isList(sexp)) (try printList(allocator, sexp)) else (try printPair(allocator, sexp));
             return try std.fmt.allocPrint(allocator, "({s})", .{content});
         },
     };
@@ -202,9 +217,21 @@ fn printPair(allocator: *std.mem.Allocator, pair: LObject) PrinterError![]const 
     };
 }
 
-fn printList(allocator: *std.mem.Allocator, list: LObject) ![]const u8 {
-    // TODO
-    return "list";
+fn printList(allocator: *std.mem.Allocator, list: LObject) PrinterError![]const u8 {
+    return switch (list) {
+        .Pair => |slice| {
+            const car = try printSexp(allocator, slice[0].*);
+
+            const cdr = switch (slice[1].*) {
+                .Nil => "",
+                .Pair => try std.fmt.allocPrint(allocator, " {s}", .{try printList(allocator, slice[1].*)}),
+                else => return error.UnexpectedValue,
+            };
+
+            return try std.fmt.allocPrint(allocator, "{s}{s}", .{ car, cdr });
+        },
+        else => error.UnexpectedValue,
+    };
 }
 
 fn isList(pair: LObject) bool {
