@@ -42,20 +42,26 @@ pub const Primitive = struct {
 };
 
 pub const Expression = union(enum) {
-    Literal: LObject, // Contains any self-evaluating values.
-    Var: []const u8, If: [3]*Expression, And: [2]*Expression, Or: [2]*Expression, Apply: [2]*Expression, Call: struct {
-        Function: *LObject,
-        Arguments: []*LObject,
-    }, DefExpression: DefExpression
+    Literal: *LObject, // Contains any self-evaluating values.
+    Variable: []const u8,
+    If: [3]*Expression,
+    And: [2]*Expression,
+    Or: [2]*Expression,
+    Apply: [2]*Expression,
+    Call: struct {
+        Function: *Expression,
+        Arguments: []*Expression,
+    },
+    DefExpression: *DefExpression,
 };
 
 // Only DefExpressions can modify the environment.
-pub const DefExpresion = union(enum) {
+pub const DefExpression = union(enum) {
     Val: struct {
         Name: []const u8,
-        Expression: Expression,
+        Expression: *Expression,
     },
-    Expression: Expression,
+    Expression: *Expression,
 };
 
 fn getListLength(sexp: LObject) ?u8 {

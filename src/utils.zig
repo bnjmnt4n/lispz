@@ -1,3 +1,5 @@
+const LObject = @import("values.zig").LObject;
+
 pub fn isWhitespace(char: u8) bool {
     return switch (char) {
         ' ', '\t', '\n' => true,
@@ -30,5 +32,13 @@ pub fn isDelimiter(char: u8) bool {
     return switch (char) {
         '"', '(', ')', '{', '}', ';' => true,
         else => isWhitespace(char),
+    };
+}
+
+pub fn isList(sexp: LObject) bool {
+    return switch (sexp) {
+        .Nil => true,
+        .Pair => |nextPair| isList(nextPair[1].*),
+        else => false,
     };
 }

@@ -1,5 +1,6 @@
 const std = @import("std");
 const LObject = @import("values.zig").LObject;
+const isList = @import("utils.zig").isList;
 
 pub const PrinterError = error{UnexpectedValue} || std.fmt.AllocPrintError;
 
@@ -43,12 +44,4 @@ fn printList(allocator: *std.mem.Allocator, sexp: LObject) PrinterError![]const 
     };
 
     return try std.fmt.allocPrint(allocator, "{s}{s}", .{ car, cdr });
-}
-
-fn isList(sexp: LObject) bool {
-    return switch (sexp) {
-        .Nil => true,
-        .Pair => |nextPair| isList(nextPair[1].*),
-        else => false,
-    };
 }
