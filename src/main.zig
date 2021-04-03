@@ -16,6 +16,23 @@ const LObject = union(enum) {
             else => null,
         };
     }
+
+    fn getListSlice(self: LObject, allocator: *std.mem.Allocator) !?[]*LObject {
+        const length = getListLength(self) orelse return null;
+
+        var slice = try allocator.alloc(*LObject, length);
+        var count: u8 = 0;
+        var list = self;
+
+        while (list != .Nil) : ({
+            list = list.Pair[1].*;
+            count += 1;
+        }) {
+            slice[count] = list.Pair[0];
+        }
+
+        return slice;
+    }
 };
 
 // Note: recursive functions cannot have inferred error sets.
@@ -238,39 +255,32 @@ fn evalSexp(allocator: *std.mem.Allocator, sexp: *LObject, environment: *LObject
         .Pair => |pair| blk: {
             const defaultExpr = [2]*LObject{ sexp, environment };
 
-            if (!isList(sexp.*)) break :blk defaultExpr;
+            const list = (try sexp.getListSlice(allocator)) orelse break :blk defaultExpr;
+            if (list.len == 0) break :blk defaultExpr;
 
-            const symbol = pair[0].getValue(.Symbol) orelse break :blk defaultExpr;
+            const symbol = list[0].getValue(.Symbol) orelse break :blk defaultExpr;
 
-            if (std.mem.eql(u8, symbol, "env")) {
+            if (list.len == 1 and std.mem.eql(u8, symbol, "env")) {
                 const nextPair = pair[1].getValue(.Nil) orelse break :blk defaultExpr;
                 break :blk [2]*LObject{ environment, environment };
             }
 
-            const nextPair = pair[1].getValue(.Pair) orelse break :blk defaultExpr;
-            const condition = nextPair[0];
-            const nextPair2 = nextPair[1].getValue(.Pair) orelse break :blk defaultExpr;
-            const consequent = nextPair2[0];
+            if (list.len == 3 and std.mem.eql(u8, symbol, "val")) {
+                const variableName = list[1].getValue(.Symbol) orelse break :blk defaultExpr;
+                const variableValue = list[2];
 
-            if (std.mem.eql(u8, symbol, "val")) {
-                // Assert end.
-                _ = nextPair2[1].getValue(.Nil) orelse break :blk defaultExpr;
-                const variableName = condition.getValue(.Symbol) orelse break :blk defaultExpr;
-
-                var result = try evalSexp(allocator, consequent, environment);
-                const variableValue = result[0];
+                var result = try evalSexp(allocator, variableValue, environment);
+                const evaluatedVariableValue = result[0];
                 const newEnvironment = result[1];
 
                 const newEnvironment2 = try bind(allocator, variableName, variableValue, newEnvironment);
 
-                break :blk [2]*LObject{ variableValue, newEnvironment2 };
+                break :blk [2]*LObject{ evaluatedVariableValue, newEnvironment2 };
             }
 
-            if (std.mem.eql(u8, symbol, "pair")) {
-                // Assert end.
-                _ = nextPair2[1].getValue(.Nil) orelse break :blk defaultExpr;
-                const carEvaluation = try evalSexp(allocator, condition, environment);
-                const cdrEvaluation = try evalSexp(allocator, consequent, carEvaluation[1]);
+            if (list.len == 3 and std.mem.eql(u8, symbol, "pair")) {
+                const carEvaluation = try evalSexp(allocator, list[1], environment);
+                const cdrEvaluation = try evalSexp(allocator, list[2], carEvaluation[1]);
 
                 const car = carEvaluation[0];
                 const cdr = cdrEvaluation[0];
@@ -282,11 +292,11 @@ fn evalSexp(allocator: *std.mem.Allocator, sexp: *LObject, environment: *LObject
                 break :blk [2]*LObject{ newPair, newEnvironment };
             }
 
-            const nextPair3 = nextPair2[1].getValue(.Pair) orelse break :blk defaultExpr;
-            const alternate = nextPair3[0];
-            const end = nextPair3[1].getValue(.Nil) orelse break :blk defaultExpr;
+            if (list.len == 4 and std.mem.eql(u8, symbol, "if")) {
+                const condition = list[1];
+                const consequent = list[2];
+                const alternate = list[3];
 
-            if (std.mem.eql(u8, symbol, "if")) {
                 var result = try evalSexp(allocator, condition, environment);
                 const conditionValue = result[0].getValue(.Boolean) orelse return error.UnexpectedIfCondition;
                 switch (conditionValue) {
@@ -374,5 +384,16 @@ fn isList(sexp: LObject) bool {
         .Nil => true,
         .Pair => |nextPair| isList(nextPair[1].*),
         else => false,
+    };
+}
+
+fn getListLength(sexp: LObject) ?u8 {
+    return switch (sexp) {
+        .Nil => 0,
+        .Pair => |nextPair| {
+            const nextCount = getListLength(nextPair[1].*) orelse return null;
+            return nextCount + 1;
+        },
+        else => null,
     };
 }
