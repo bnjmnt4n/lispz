@@ -105,7 +105,7 @@ const Parser = struct {
         const fixnum = if (isNegative) -num else num;
 
         var node = try self.allocator.create(LObject);
-        node.* = LObject{ .Fixnum = fixnum };
+        node.* = .{ .Fixnum = fixnum };
         return node;
     }
 
@@ -118,7 +118,7 @@ const Parser = struct {
         };
 
         var node = try self.allocator.create(LObject);
-        node.* = LObject{ .Boolean = boolean };
+        node.* = .{ .Boolean = boolean };
         return node;
     }
 
@@ -131,7 +131,7 @@ const Parser = struct {
 
         const symbol = self.input[startIndex..endIndex];
         var node = try self.allocator.create(LObject);
-        node.* = LObject{ .Symbol = symbol };
+        node.* = .{ .Symbol = symbol };
         return node;
     }
 
@@ -149,7 +149,7 @@ const Parser = struct {
             const car = try self.readSexp();
             const cdr = try self.readList();
 
-            node.* = LObject{ .Pair = .{ car, cdr } };
+            node.* = .{ .Pair = .{ car, cdr } };
         }
 
         return node;
@@ -312,13 +312,13 @@ fn evalSexp(allocator: *std.mem.Allocator, sexp: *LObject, environment: *LObject
 
 fn bind(allocator: *std.mem.Allocator, name: []const u8, value: *LObject, environment: *LObject) !*LObject {
     var symbol = try allocator.create(LObject);
-    symbol.* = LObject{ .Symbol = name };
+    symbol.* = .{ .Symbol = name };
 
     var nameValuePair = try allocator.create(LObject);
-    nameValuePair.* = LObject{ .Pair = .{ symbol, value } };
+    nameValuePair.* = .{ .Pair = .{ symbol, value } };
 
     var newEnvironment = try allocator.create(LObject);
-    newEnvironment.* = LObject{ .Pair = .{ nameValuePair, environment } };
+    newEnvironment.* = .{ .Pair = .{ nameValuePair, environment } };
     return newEnvironment;
 }
 
