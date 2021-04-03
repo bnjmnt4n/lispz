@@ -1,5 +1,6 @@
 const std = @import("std");
 const LObject = @import("values.zig").LObject;
+const Expression = @import("values.zig").Expression;
 const executePrimitives = @import("primitives.zig").executePrimitives;
 
 pub const EvaluationError = error{
@@ -7,7 +8,7 @@ pub const EvaluationError = error{
     UnexpectedIfCondition,
 } || std.mem.Allocator.Error;
 
-pub fn eval(allocator: *std.mem.Allocator, sexp: *LObject, environment: *LObject) EvaluationError![2]*LObject {
+pub fn eval(allocator: *std.mem.Allocator, sexp: *Expression, environment: *LObject) EvaluationError![2]*LObject {
     return switch (sexp.*) {
         .Nil => .{ sexp, environment },
         .Fixnum => .{ sexp, environment },
