@@ -7,7 +7,7 @@ pub const EvaluationError = error{
     UnexpectedIfCondition,
 } || std.mem.Allocator.Error;
 
-pub fn evalSexp(allocator: *std.mem.Allocator, sexp: *LObject, environment: *LObject) EvaluationError![2]*LObject {
+pub fn eval(allocator: *std.mem.Allocator, sexp: *LObject, environment: *LObject) EvaluationError![2]*LObject {
     return switch (sexp.*) {
         .Nil => .{ sexp, environment },
         .Fixnum => .{ sexp, environment },
@@ -30,7 +30,7 @@ pub fn evalSexp(allocator: *std.mem.Allocator, sexp: *LObject, environment: *LOb
                 const variableName = list[1].getValue(.Symbol) orelse break :blk defaultExpr;
                 const variableValue = list[2];
 
-                var result = try evalSexp(allocator, variableValue, environment);
+                var result = try eval(allocator, variableValue, environment);
                 const evaluatedVariableValue = result[0];
                 const newEnvironment = result[1];
 
@@ -44,7 +44,7 @@ pub fn evalSexp(allocator: *std.mem.Allocator, sexp: *LObject, environment: *LOb
                 const consequent = list[2];
                 const alternate = list[3];
 
-                var result = try evalSexp(allocator, condition, environment);
+                var result = try eval(allocator, condition, environment);
                 const conditionValue = result[0].getValue(.Boolean) orelse return error.UnexpectedIfCondition;
                 switch (conditionValue) {
                     true => break :blk [2]*LObject{ consequent, environment },

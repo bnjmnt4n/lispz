@@ -2,8 +2,9 @@ const std = @import("std");
 const zinput = @import("zinput");
 const LObject = @import("values.zig").LObject;
 const Parser = @import("parser.zig").Parser;
-const printSexp = @import("print.zig").printSexp;
-const evalSexp = @import("evaluate.zig").evalSexp;
+const print = @import("print.zig").print;
+const buildAst = @import("ast.zig").buildAst;
+const eval = @import("evaluate.zig").eval;
 const utils = @import("utils.zig");
 
 pub fn main() anyerror!void {
@@ -39,7 +40,9 @@ pub fn main() anyerror!void {
             continue;
         };
 
-        const evalResult = evalSexp(allocator, &sexp, environment) catch |err| switch (err) {
+        const ast = try buildAst(allocator, &sexp);
+
+        const evalResult = eval(allocator, ast, environment) catch |err| switch (err) {
             error.NotFound => {
                 std.debug.print("Couldn't find value.\n", .{});
                 continue;
@@ -50,14 +53,14 @@ pub fn main() anyerror!void {
             },
         };
 
-        const evaluatedSexp = evalResult[0];
+        const evaluatedValue = evalResult[0];
         environment = evalResult[1];
 
-        const printedSexp = printSexp(allocator, evaluatedSexp.*) catch |err| {
+        const printedValue = print(allocator, evaluatedValue.*) catch |err| {
             std.debug.print("Error printing value.\n", .{});
             continue;
         };
 
-        std.debug.print("{s}\n", .{printedSexp});
+        std.debug.print("{s}\n", .{printedValue});
     }
 }

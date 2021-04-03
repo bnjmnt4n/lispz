@@ -3,7 +3,7 @@ const LObject = @import("values.zig").LObject;
 
 pub const PrinterError = error{UnexpectedValue} || std.fmt.AllocPrintError;
 
-pub fn printSexp(allocator: *std.mem.Allocator, sexp: LObject) PrinterError![]const u8 {
+pub fn print(allocator: *std.mem.Allocator, sexp: LObject) PrinterError![]const u8 {
     return switch (sexp) {
         .Symbol => |symbol| try std.fmt.allocPrint(allocator, "{s}", .{symbol}),
         .Fixnum => |num| try std.fmt.allocPrint(allocator, "{}", .{num}),
@@ -25,14 +25,14 @@ fn printPair(allocator: *std.mem.Allocator, sexp: LObject) PrinterError![]const 
     const pair = sexp.getValue(.Pair) orelse unreachable;
 
     return try std.fmt.allocPrint(allocator, "{s} . {s}", .{
-        try printSexp(allocator, pair[0].*),
-        try printSexp(allocator, pair[1].*),
+        try print(allocator, pair[0].*),
+        try print(allocator, pair[1].*),
     });
 }
 
 fn printList(allocator: *std.mem.Allocator, sexp: LObject) PrinterError![]const u8 {
     const pair = sexp.getValue(.Pair) orelse unreachable;
-    const car = try printSexp(allocator, pair[0].*);
+    const car = try print(allocator, pair[0].*);
 
     const cdr = switch (pair[1].*) {
         .Nil => "",
