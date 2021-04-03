@@ -238,6 +238,8 @@ fn evalSexp(allocator: *std.mem.Allocator, sexp: *LObject, environment: *LObject
         .Pair => |pair| blk: {
             const defaultExpr = [2]*LObject{ sexp, environment };
 
+            if (!isList(sexp.*)) break :blk defaultExpr;
+
             const symbol = pair[0].getValue(.Symbol) orelse break :blk defaultExpr;
 
             if (std.mem.eql(u8, symbol, "env")) {
@@ -267,13 +269,17 @@ fn evalSexp(allocator: *std.mem.Allocator, sexp: *LObject, environment: *LObject
             if (std.mem.eql(u8, symbol, "pair")) {
                 // Assert end.
                 _ = nextPair2[1].getValue(.Nil) orelse break :blk defaultExpr;
-                const car = condition;
-                const cdr = consequent;
+                const carEvaluation = try evalSexp(allocator, condition, environment);
+                const cdrEvaluation = try evalSexp(allocator, consequent, carEvaluation[1]);
+
+                const car = carEvaluation[0];
+                const cdr = cdrEvaluation[0];
+                const newEnvironment = cdrEvaluation[1];
 
                 var newPair = try allocator.create(LObject);
                 newPair.* = LObject{ .Pair = .{ car, cdr } };
 
-                break :blk [2]*LObject{ newPair, environment };
+                break :blk [2]*LObject{ newPair, newEnvironment };
             }
 
             const nextPair3 = nextPair2[1].getValue(.Pair) orelse break :blk defaultExpr;
@@ -283,10 +289,9 @@ fn evalSexp(allocator: *std.mem.Allocator, sexp: *LObject, environment: *LObject
             if (std.mem.eql(u8, symbol, "if")) {
                 var result = try evalSexp(allocator, condition, environment);
                 const conditionValue = result[0].getValue(.Boolean) orelse return error.UnexpectedIfCondition;
-                const newEnvironment = result[1];
                 switch (conditionValue) {
-                    true => break :blk [2]*LObject{ consequent, newEnvironment },
-                    false => break :blk [2]*LObject{ alternate, newEnvironment },
+                    true => break :blk [2]*LObject{ consequent, environment },
+                    false => break :blk [2]*LObject{ alternate, environment },
                 }
             }
 
