@@ -54,6 +54,8 @@ pub fn evalSexp(allocator: *std.mem.Allocator, sexp: *LObject, environment: *LOb
 
             return executePrimitives(allocator, symbol, list[1..], environment);
         },
+        // Primitives cannot be evaluated.
+        .Primitive => unreachable,
     };
 }
 

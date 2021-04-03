@@ -17,6 +17,7 @@ pub fn printSexp(allocator: *std.mem.Allocator, sexp: LObject) PrinterError![]co
                 (try printPair(allocator, sexp));
             return try std.fmt.allocPrint(allocator, "({s})", .{content});
         },
+        .Primitive => |primitive| try std.fmt.allocPrint(allocator, "#<primitive:{s}>", .{primitive.Name}),
     };
 }
 
