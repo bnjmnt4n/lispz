@@ -35,6 +35,68 @@ const LObject = union(enum) {
     }
 };
 
+const Primitive = struct {
+    Name: []const u8,
+    Function: fn (allocator: *std.mem.Allocator, list: []*LObject, environment: *LObject) EvaluationError!?[2]*LObject,
+};
+
+fn primitiveList(allocator: *std.mem.Allocator, list: []*LObject, environment: *LObject) EvaluationError!?[2]*LObject {
+    var i = list.len;
+
+    var node = try allocator.create(LObject);
+    node.* = LObject.Nil;
+
+    while (i > 0) : (i -= 1) {
+        var car = list[i - 1];
+
+        var pair = try allocator.create(LObject);
+        pair.* = .{ .Pair = .{ car, node } };
+
+        node = pair;
+    }
+
+    return [2]*LObject{ node, environment };
+}
+
+fn primitivePair(allocator: *std.mem.Allocator, list: []*LObject, environment: *LObject) EvaluationError!?[2]*LObject {
+    if (list.len != 2) return null;
+    const car = list[0];
+    const cdr = list[1];
+
+    var node = try allocator.create(LObject);
+    node.* = .{ .Pair = .{ car, cdr } };
+    return [2]*LObject{ node, environment };
+}
+
+fn primitiveAdd(allocator: *std.mem.Allocator, list: []*LObject, environment: *LObject) EvaluationError!?[2]*LObject {
+    if (list.len != 2) return null;
+    const a = list[0].getValue(.Fixnum) orelse return null;
+    const b = list[1].getValue(.Fixnum) orelse return null;
+
+    const fixnum = a + b;
+
+    var node = try allocator.create(LObject);
+    node.* = .{ .Fixnum = fixnum };
+    return [2]*LObject{ node, environment };
+}
+
+const Primitives = &[_]Primitive{
+    Primitive{ .Name = "list", .Function = primitiveList },
+    Primitive{ .Name = "pair", .Function = primitivePair },
+    Primitive{ .Name = "+", .Function = primitiveAdd },
+};
+
+fn executePrimitives(allocator: *std.mem.Allocator, name: []const u8, arguments: []*LObject, environment: *LObject) EvaluationError![2]*LObject {
+    for (Primitives) |primitive| {
+        if (std.mem.eql(u8, primitive.Name, name)) {
+            const result = (try primitive.Function(allocator, arguments, environment)) orelse continue;
+            return result;
+        }
+    }
+
+    return error.NotFound;
+}
+
 // Note: recursive functions cannot have inferred error sets.
 // See https://github.com/ziglang/zig/issues/2971.
 const ParserError = error{
@@ -278,20 +340,6 @@ fn evalSexp(allocator: *std.mem.Allocator, sexp: *LObject, environment: *LObject
                 break :blk [2]*LObject{ evaluatedVariableValue, newEnvironment2 };
             }
 
-            if (list.len == 3 and std.mem.eql(u8, symbol, "pair")) {
-                const carEvaluation = try evalSexp(allocator, list[1], environment);
-                const cdrEvaluation = try evalSexp(allocator, list[2], carEvaluation[1]);
-
-                const car = carEvaluation[0];
-                const cdr = cdrEvaluation[0];
-                const newEnvironment = cdrEvaluation[1];
-
-                var newPair = try allocator.create(LObject);
-                newPair.* = LObject{ .Pair = .{ car, cdr } };
-
-                break :blk [2]*LObject{ newPair, newEnvironment };
-            }
-
             if (list.len == 4 and std.mem.eql(u8, symbol, "if")) {
                 const condition = list[1];
                 const consequent = list[2];
@@ -305,7 +353,7 @@ fn evalSexp(allocator: *std.mem.Allocator, sexp: *LObject, environment: *LObject
                 }
             }
 
-            break :blk defaultExpr;
+            return executePrimitives(allocator, symbol, list[1..], environment);
         },
     };
 }
