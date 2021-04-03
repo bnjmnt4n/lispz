@@ -201,9 +201,15 @@ pub fn main() anyerror!void {
             continue;
         };
 
-        const evalResult = evalSexp(allocator, &sexp, environment) catch |err| {
-            std.debug.print("Error evaluating value.\n", .{});
-            continue;
+        const evalResult = evalSexp(allocator, &sexp, environment) catch |err| switch (err) {
+            error.NotFound => {
+                std.debug.print("Couldn't find value.\n", .{});
+                continue;
+            },
+            else => {
+                std.debug.print("Error evaluating value.\n", .{});
+                continue;
+            },
         };
 
         const evaluatedSexp = evalResult[0];
@@ -218,14 +224,17 @@ pub fn main() anyerror!void {
     }
 }
 
-const EvaluationError = error{UnexpectedIfCondition} || std.mem.Allocator.Error;
+const EvaluationError = error{
+    NotFound,
+    UnexpectedIfCondition,
+} || std.mem.Allocator.Error;
 
 fn evalSexp(allocator: *std.mem.Allocator, sexp: *LObject, environment: *LObject) EvaluationError![2]*LObject {
     return switch (sexp.*) {
         .Nil => .{ sexp, environment },
         .Fixnum => .{ sexp, environment },
         .Boolean => .{ sexp, environment },
-        .Symbol => .{ sexp, environment },
+        .Symbol => |name| .{ try lookup(name, environment), environment },
         .Pair => |pair| blk: {
             const defaultExpr = [2]*LObject{ sexp, environment };
 
@@ -233,7 +242,7 @@ fn evalSexp(allocator: *std.mem.Allocator, sexp: *LObject, environment: *LObject
 
             if (std.mem.eql(u8, symbol, "env")) {
                 const nextPair = pair[1].getValue(.Nil) orelse break :blk defaultExpr;
-                return [2]*LObject{ environment, environment };
+                break :blk [2]*LObject{ environment, environment };
             }
 
             const nextPair = pair[1].getValue(.Pair) orelse break :blk defaultExpr;
@@ -252,7 +261,19 @@ fn evalSexp(allocator: *std.mem.Allocator, sexp: *LObject, environment: *LObject
 
                 const newEnvironment2 = try bind(allocator, variableName, variableValue, newEnvironment);
 
-                return [2]*LObject{ variableValue, newEnvironment2 };
+                break :blk [2]*LObject{ variableValue, newEnvironment2 };
+            }
+
+            if (std.mem.eql(u8, symbol, "pair")) {
+                // Assert end.
+                _ = nextPair2[1].getValue(.Nil) orelse break :blk defaultExpr;
+                const car = condition;
+                const cdr = consequent;
+
+                var newPair = try allocator.create(LObject);
+                newPair.* = LObject{ .Pair = .{ car, cdr } };
+
+                break :blk [2]*LObject{ newPair, environment };
             }
 
             const nextPair3 = nextPair2[1].getValue(.Pair) orelse break :blk defaultExpr;
