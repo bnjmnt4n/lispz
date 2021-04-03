@@ -1,5 +1,3 @@
-const std = @import("std");
-
 pub fn isWhitespace(char: u8) bool {
     return switch (char) {
         ' ', '\t', '\n' => true,
@@ -33,14 +31,4 @@ pub fn isDelimiter(char: u8) bool {
         '"', '(', ')', '{', '}', ';' => true,
         else => isWhitespace(char),
     };
-}
-
-pub fn getUnionFieldType(comptime T: anytype, comptime tag: std.meta.Tag(T)) type {
-    for (@typeInfo(T).Union.fields) |field| {
-        if (std.mem.eql(u8, field.name, @tagName(tag))) {
-            return field.field_type;
-        }
-    }
-
-    unreachable;
 }

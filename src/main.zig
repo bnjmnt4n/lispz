@@ -10,7 +10,7 @@ const LObject = union(enum) {
     // TODO: figure out the differences between *const LObject and *LObject.
     Pair: [2]*LObject,
 
-    fn getValue(self: LObject, comptime tag: std.meta.Tag(LObject)) ?utils.getUnionFieldType(LObject, tag) {
+    fn getValue(self: LObject, comptime tag: std.meta.Tag(LObject)) ?std.meta.TagPayload(LObject, tag) {
         return switch (self) {
             tag => @field(self, @tagName(tag)),
             else => null,
@@ -227,7 +227,7 @@ fn evalSexp(sexp: *LObject, environment: *LObject) EvaluationError![2]*LObject {
         .Boolean => .{ sexp, environment },
         .Symbol => .{ sexp, environment },
         .Pair => |slice| blk: {
-            const defaultExpr = [2]*LObject { sexp, environment };
+            const defaultExpr = [2]*LObject{ sexp, environment };
 
             const ifSymbol = slice[0].getValue(.Symbol) orelse break :blk defaultExpr;
             const nextPair = slice[1].getValue(.Pair) orelse break :blk defaultExpr;
@@ -242,8 +242,8 @@ fn evalSexp(sexp: *LObject, environment: *LObject) EvaluationError![2]*LObject {
             const conditionValue = result[0].getValue(.Boolean) orelse return error.UnexpectedIfCondition;
             const newEnvironment = result[1];
             switch (conditionValue) {
-                true => break :blk [2]*LObject { consequent, newEnvironment },
-                false => break :blk [2]*LObject { alternate, newEnvironment },
+                true => break :blk [2]*LObject{ consequent, newEnvironment },
+                false => break :blk [2]*LObject{ alternate, newEnvironment },
             }
 
             break :blk defaultExpr;
