@@ -1,62 +1,79 @@
 const std = @import("std");
 const LObject = @import("values.zig").LObject;
 const Expression = @import("values.zig").Expression;
-const executePrimitives = @import("primitives.zig").executePrimitives;
+const DefExpression = @import("values.zig").DefExpression;
 
 pub const EvaluationError = error{
     NotFound,
     UnexpectedIfCondition,
+    UnexpectedValue,
 } || std.mem.Allocator.Error;
 
-pub fn eval(allocator: *std.mem.Allocator, sexp: *Expression, environment: *LObject) EvaluationError![2]*LObject {
-    return switch (sexp.*) {
-        .Nil => .{ sexp, environment },
-        .Fixnum => .{ sexp, environment },
-        .Boolean => .{ sexp, environment },
-        .Symbol => |name| .{ try lookup(name, environment), environment },
-        .Pair => |pair| blk: {
-            const defaultExpr = [2]*LObject{ sexp, environment };
-
-            const list = (try sexp.getListSlice(allocator)) orelse break :blk defaultExpr;
-            if (list.len == 0) break :blk defaultExpr;
-
-            const symbol = list[0].getValue(.Symbol) orelse break :blk defaultExpr;
-
-            if (list.len == 1 and std.mem.eql(u8, symbol, "env")) {
-                const nextPair = pair[1].getValue(.Nil) orelse break :blk defaultExpr;
-                break :blk [2]*LObject{ environment, environment };
-            }
-
-            if (list.len == 3 and std.mem.eql(u8, symbol, "val")) {
-                const variableName = list[1].getValue(.Symbol) orelse break :blk defaultExpr;
-                const variableValue = list[2];
-
-                var result = try eval(allocator, variableValue, environment);
-                const evaluatedVariableValue = result[0];
-                const newEnvironment = result[1];
-
-                const newEnvironment2 = try bind(allocator, variableName, variableValue, newEnvironment);
-
-                break :blk [2]*LObject{ evaluatedVariableValue, newEnvironment2 };
-            }
-
-            if (list.len == 4 and std.mem.eql(u8, symbol, "if")) {
-                const condition = list[1];
-                const consequent = list[2];
-                const alternate = list[3];
-
-                var result = try eval(allocator, condition, environment);
-                const conditionValue = result[0].getValue(.Boolean) orelse return error.UnexpectedIfCondition;
-                switch (conditionValue) {
-                    true => break :blk [2]*LObject{ consequent, environment },
-                    false => break :blk [2]*LObject{ alternate, environment },
-                }
-            }
-
-            return executePrimitives(allocator, symbol, list[1..], environment);
+pub fn eval(allocator: *std.mem.Allocator, expression: *Expression, environment: *LObject) EvaluationError![2]*LObject {
+    return switch (expression.*) {
+        // Only DefExpressions modify the environment.
+        .DefExpression => |defExpr| evalDefExpression(allocator, defExpr, environment),
+        else => blk: {
+            const result = try evalExpression(allocator, expression, environment);
+            break :blk .{ result, environment };
         },
-        // Primitives cannot be evaluated.
-        .Primitive => unreachable,
+    };
+}
+
+fn evalDefExpression(allocator: *std.mem.Allocator, defExpr: *DefExpression, environment: *LObject) EvaluationError![2]*LObject {
+    return switch (defExpr.*) {
+        .Val => |value| blk: {
+            const result = try evalExpression(allocator, value.Expression, environment);
+            const newEnvironment = try bind(allocator, value.Name, result, environment);
+
+            break :blk .{ result, newEnvironment };
+        },
+        // TODO: figure out why the blog added an Expression type to DefExpression
+        .Expression => |expression| blk: {
+            const result = try evalExpression(allocator, expression, environment);
+            break :blk .{ result, environment };
+        },
+    };
+}
+
+pub fn evalExpression(allocator: *std.mem.Allocator, expression: *Expression, environment: *LObject) EvaluationError!*LObject {
+    return switch (expression.*) {
+        .Literal => |literal| literal,
+        .Variable => |name| try lookup(name, environment),
+        .If => |expressions| blk: {
+            const condition = try evalExpression(allocator, expressions[0], environment);
+            const result = condition.getValue(.Boolean) orelse return error.UnexpectedIfCondition;
+
+            break :blk try evalExpression(allocator, if (result) expressions[1] else expressions[2], environment);
+        },
+        .And => |expressions| blk: {
+            const expr1 = try evalExpression(allocator, expressions[0], environment);
+            const expr2 = try evalExpression(allocator, expressions[1], environment);
+            const result1 = expr1.getValue(.Boolean) orelse return error.UnexpectedValue;
+            const result2 = expr2.getValue(.Boolean) orelse return error.UnexpectedValue;
+
+            var node = try allocator.create(LObject);
+            node.* = .{ .Boolean = result1 and result2 };
+            break :blk node;
+        },
+        .Or => |expressions| blk: {
+            const expr1 = try evalExpression(allocator, expressions[0], environment);
+            const expr2 = try evalExpression(allocator, expressions[1], environment);
+            const result1 = expr1.getValue(.Boolean) orelse return error.UnexpectedValue;
+            const result2 = expr2.getValue(.Boolean) orelse return error.UnexpectedValue;
+
+            var node = try allocator.create(LObject);
+            node.* = .{ .Boolean = result1 or result2 };
+            break :blk node;
+        },
+        // TODO
+        // .Apply => |expressions| blk: {
+        //     break :blk;
+        // },
+        // .Call => |call| blk: {
+        //     break :blk;
+        // },
+        else => unreachable,
     };
 }
 
