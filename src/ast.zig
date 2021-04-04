@@ -22,21 +22,7 @@ pub fn buildAst(allocator: *std.mem.Allocator, sexp: *LObject) BuildError!*Expre
 
             if (list.len == 0) return error.UnexpectedValue;
 
-            const symbol = list[0].getValue(.Symbol) orelse {
-                const function = try buildAst(allocator, list[0]);
-                const arguments = try allocator.alloc(*Expression, list.len - 1);
-                for (list[1..]) |argument, i| {
-                    arguments[i] = try buildAst(allocator, argument);
-                }
-
-                expression.* = .{
-                    .Call = .{
-                        .Function = function,
-                        .Arguments = arguments,
-                    },
-                };
-                break :blk;
-            };
+            const symbol = list[0].getValue(.Symbol) orelse return error.UnexpectedValue;
 
             if (list.len == 4 and std.mem.eql(u8, symbol, "if")) {
                 expression.* = .{
@@ -98,7 +84,19 @@ pub fn buildAst(allocator: *std.mem.Allocator, sexp: *LObject) BuildError!*Expre
                 break :blk;
             }
 
-            return error.UnexpectedValue;
+            const function = try buildAst(allocator, list[0]);
+            const arguments = try allocator.alloc(*Expression, list.len - 1);
+            for (list[1..]) |argument, i| {
+                arguments[i] = try buildAst(allocator, argument);
+            }
+
+            expression.* = .{
+                .Call = .{
+                    .Function = function,
+                    .Arguments = arguments,
+                },
+            };
+            break :blk;
         },
     }
 

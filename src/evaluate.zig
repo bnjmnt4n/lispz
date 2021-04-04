@@ -66,18 +66,40 @@ pub fn evalExpression(allocator: *std.mem.Allocator, expression: *Expression, en
             node.* = .{ .Boolean = result1 or result2 };
             break :blk node;
         },
-        // TODO
-        // .Apply => |expressions| blk: {
-        //     break :blk;
-        // },
-        // .Call => |call| blk: {
-        //     break :blk;
-        // },
+        .Apply => |expressions| blk: {
+            const function = try evalExpression(allocator, expressions[0], environment);
+            const argumentsList = try evalExpression(allocator, expressions[1], environment);
+            // TODO: figure out error type.
+            const argumentsSlice = (try argumentsList.getListSlice(allocator)) orelse return error.UnexpectedValue;
+
+            break :blk evalApplication(allocator, function, argumentsSlice, environment);
+        },
+        .Call => |call| blk: {
+            const arguments = call.Arguments;
+            if (call.Function.* == Expression.Variable and std.mem.eql(u8, call.Function.Variable, "env") and arguments.len == 0) {
+                break :blk environment;
+            }
+            const function = try evalExpression(allocator, call.Function, environment);
+
+            const evaluatedArguments = try allocator.alloc(*LObject, arguments.len);
+            for (arguments) |argument, i| {
+                evaluatedArguments[i] = try evalExpression(allocator, argument, environment);
+            }
+
+            break :blk evalApplication(allocator, function, evaluatedArguments, environment);
+        },
         else => unreachable,
     };
 }
 
-fn bind(allocator: *std.mem.Allocator, name: []const u8, value: *LObject, environment: *LObject) !*LObject {
+pub fn evalApplication(allocator: *std.mem.Allocator, function: *LObject, arguments: []*LObject, environment: *LObject) EvaluationError!*LObject {
+    return switch (function.*) {
+        .Primitive => |primitive| (try primitive.Function(allocator, arguments, environment)).?[0],
+        else => error.UnexpectedValue,
+    };
+}
+
+pub fn bind(allocator: *std.mem.Allocator, name: []const u8, value: *LObject, environment: *LObject) !*LObject {
     var symbol = try allocator.create(LObject);
     symbol.* = .{ .Symbol = name };
 
@@ -93,8 +115,8 @@ fn lookup(name: []const u8, environment: *LObject) !*LObject {
     switch (environment.*) {
         .Nil => return error.NotFound,
         .Pair => |pair| {
-            const nameValuePair = pair[0].getValue(.Pair) orelse unreachable;
-            const nameSymbol = nameValuePair[0].getValue(.Symbol) orelse unreachable;
+            const nameValuePair = pair[0].getValue(.Pair).?;
+            const nameSymbol = nameValuePair[0].getValue(.Symbol).?;
 
             if (std.mem.eql(u8, name, nameSymbol)) return nameValuePair[1];
             return lookup(name, pair[1]);

@@ -1,6 +1,7 @@
 const std = @import("std");
 const LObject = @import("values.zig").LObject;
 const Primitive = @import("values.zig").Primitive;
+const bind = @import("evaluate.zig").bind;
 const EvaluationError = @import("evaluate.zig").EvaluationError;
 
 fn primitiveList(allocator: *std.mem.Allocator, list: []*LObject, environment: *LObject) EvaluationError!?[2]*LObject {
@@ -44,18 +45,19 @@ fn primitiveAdd(allocator: *std.mem.Allocator, list: []*LObject, environment: *L
 }
 
 const Primitives = &[_]Primitive{
-    Primitive{ .Name = "list", .Function = primitiveList },
-    Primitive{ .Name = "pair", .Function = primitivePair },
-    Primitive{ .Name = "+", .Function = primitiveAdd },
+    .{ .Name = "list", .Function = primitiveList },
+    .{ .Name = "pair", .Function = primitivePair },
+    .{ .Name = "+", .Function = primitiveAdd },
 };
 
-pub fn executePrimitives(allocator: *std.mem.Allocator, name: []const u8, arguments: []*LObject, environment: *LObject) EvaluationError![2]*LObject {
+pub fn constructEnvironment(allocator: *std.mem.Allocator, environment: *LObject) EvaluationError!*LObject {
+    var env = environment;
+
     for (Primitives) |primitive| {
-        if (std.mem.eql(u8, primitive.Name, name)) {
-            const result = (try primitive.Function(allocator, arguments, environment)) orelse continue;
-            return result;
-        }
+        var lobject = try allocator.create(LObject);
+        lobject.* = .{ .Primitive = primitive };
+        env = try bind(allocator, primitive.Name, lobject, env);
     }
 
-    return error.NotFound;
+    return env;
 }

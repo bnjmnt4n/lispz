@@ -23,7 +23,7 @@ pub fn print(allocator: *std.mem.Allocator, sexp: LObject) PrinterError![]const 
 }
 
 fn printPair(allocator: *std.mem.Allocator, sexp: LObject) PrinterError![]const u8 {
-    const pair = sexp.getValue(.Pair) orelse unreachable;
+    const pair = sexp.getValue(.Pair).?;
 
     return try std.fmt.allocPrint(allocator, "{s} . {s}", .{
         try print(allocator, pair[0].*),
@@ -32,7 +32,7 @@ fn printPair(allocator: *std.mem.Allocator, sexp: LObject) PrinterError![]const 
 }
 
 fn printList(allocator: *std.mem.Allocator, sexp: LObject) PrinterError![]const u8 {
-    const pair = sexp.getValue(.Pair) orelse unreachable;
+    const pair = sexp.getValue(.Pair).?;
     const car = try print(allocator, pair[0].*);
 
     const cdr = switch (pair[1].*) {

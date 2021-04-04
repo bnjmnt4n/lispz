@@ -6,6 +6,7 @@ const print = @import("print.zig").print;
 const buildAst = @import("ast.zig").buildAst;
 const eval = @import("evaluate.zig").eval;
 const utils = @import("utils.zig");
+const constructEnvironment = @import("primitives.zig").constructEnvironment;
 
 pub fn main() anyerror!void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -15,6 +16,7 @@ pub fn main() anyerror!void {
 
     var environmentValue: LObject = LObject.Nil;
     var environment = &environmentValue;
+    environment = try constructEnvironment(allocator, environment);
 
     // Read-Eval-Print-Loop
     while (true) {
