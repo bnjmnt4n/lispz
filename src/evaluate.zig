@@ -20,6 +20,8 @@ pub fn eval(allocator: *std.mem.Allocator, expression: *Expression, environment:
     };
 }
 
+const a = std;
+
 fn evalDefExpression(allocator: *std.mem.Allocator, defExpr: *DefExpression, environment: *LObject) EvaluationError![2]*LObject {
     return switch (defExpr.*) {
         .Val => |value| blk: {

@@ -95,7 +95,11 @@ fn readSymbol(self: *Self) ParserError!*LObject {
     }
     const endIndex = self.index;
 
-    const symbol = self.input[startIndex..endIndex];
+    const origSymbol = self.input[startIndex..endIndex];
+    var symbol = try self.allocator.alloc(u8, origSymbol.len);
+    errdefer self.allocator.free(symbol);
+    std.mem.copy(u8, symbol, origSymbol);
+
     var node = try self.allocator.create(LObject);
     node.* = .{ .Symbol = symbol };
     return node;
@@ -138,13 +142,32 @@ fn readSexp(self: *Self) ParserError!*LObject {
     }
 }
 
-pub fn getValue(self: *Self) ParserError!LObject {
+/// Returns a pointer to an `LObject` or an error.
+/// If an `LObject` is returned, the consumer is responsible for freeing the object.
+/// That can be done recursively using `Parser.destroy`.
+pub fn getValue(self: *Self) ParserError!*LObject {
     const sexpPointer = try self.readSexp();
+    errdefer destroy(self, sexpPointer);
 
     self.eatWhitespace();
     if (!self.isDone()) {
         return error.UnexpectedValue;
     } else {
-        return sexpPointer.*;
+        return sexpPointer;
     }
+}
+
+pub fn destroy(self: *Self, sexp: *LObject) void {
+    switch (sexp.*) {
+        .Nil, .Fixnum, .Boolean => {},
+        .Symbol => |symbol| self.allocator.free(symbol),
+        .Pair => |pair| {
+            self.destroy(pair[0]);
+            self.destroy(pair[1]);
+        },
+        // TODO: unreachable?
+        .Primitive => unreachable,
+    }
+
+    self.allocator.destroy(sexp);
 }

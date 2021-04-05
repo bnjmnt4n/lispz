@@ -55,7 +55,7 @@ pub fn main() anyerror!void {
             continue;
         };
 
-        const ast = buildAst(allocator, &sexp) catch |err| switch (err) {
+        const ast = buildAst(allocator, sexp) catch |err| switch (err) {
             error.UnexpectedValue => {
                 std.debug.print("Unexpected value found while constructing AST.\n", .{});
                 continue;
