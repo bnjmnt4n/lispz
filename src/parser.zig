@@ -146,28 +146,13 @@ fn readSexp(self: *Self) ParserError!*LObject {
 /// If an `LObject` is returned, the consumer is responsible for freeing the object.
 /// That can be done recursively using `Parser.destroy`.
 pub fn getValue(self: *Self) ParserError!*LObject {
-    const sexpPointer = try self.readSexp();
-    errdefer destroy(self, sexpPointer);
+    const sexp = try self.readSexp();
+    errdefer sexp.destroy(self.allocator);
 
     self.eatWhitespace();
     if (!self.isDone()) {
         return error.UnexpectedValue;
     } else {
-        return sexpPointer;
+        return sexp;
     }
-}
-
-pub fn destroy(self: *Self, sexp: *LObject) void {
-    switch (sexp.*) {
-        .Nil, .Fixnum, .Boolean => {},
-        .Symbol => |symbol| self.allocator.free(symbol),
-        .Pair => |pair| {
-            self.destroy(pair[0]);
-            self.destroy(pair[1]);
-        },
-        // TODO: unreachable?
-        .Primitive => unreachable,
-    }
-
-    self.allocator.destroy(sexp);
 }

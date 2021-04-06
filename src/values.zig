@@ -33,6 +33,20 @@ pub const LObject = union(enum) {
 
         return slice;
     }
+
+    pub fn destroy(self: *LObject, allocator: *std.mem.Allocator) void {
+        switch (self.*) {
+            .Nil, .Fixnum, .Boolean => {},
+            .Symbol => |symbol| allocator.free(symbol),
+            .Pair => |pair| {
+                pair[0].destroy(allocator);
+                pair[1].destroy(allocator);
+            },
+            .Primitive => {},
+        }
+
+        allocator.destroy(self);
+    }
 };
 
 // Primitive functions defined within the environment.
