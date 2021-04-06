@@ -36,19 +36,47 @@ fn evalDefExpression(allocator: *std.mem.Allocator, defExpr: *DefExpression, env
     };
 }
 
+fn duplicateObject(allocator: *std.mem.Allocator, object: *LObject) std.mem.Allocator.Error!*LObject {
+    var node = try allocator.create(LObject);
+    errdefer allocator.destroy(node);
+
+    switch (object.*) {
+        .Boolean => |boolean| node.* = .{ .Boolean = boolean },
+        .Fixnum => |num| node.* = .{ .Fixnum = num },
+        .Nil => node.* = LObject.Nil,
+        .Symbol => |origSymbol| {
+            var symbol = try allocator.alloc(u8, origSymbol.len);
+            std.mem.copy(u8, symbol, origSymbol);
+            node.* = .{ .Symbol = symbol };
+        },
+        .Pair => |pair| {
+            const car = try duplicateObject(allocator, pair[0]);
+            errdefer car.destroy(allocator);
+            const cdr = try duplicateObject(allocator, pair[0]);
+            node.* = .{ .Pair = .{ car, cdr } };
+        },
+        .Primitive => |primitive| node.* = .{ .Primitive = primitive },
+    }
+
+    return node;
+}
+
 pub fn evalExpression(allocator: *std.mem.Allocator, expression: *Expression, environment: *LObject) EvaluationError!*LObject {
     return switch (expression.*) {
-        .Literal => |literal| literal,
-        .Variable => |name| try lookup(name, environment),
+        .Literal => |literal| try duplicateObject(allocator, literal),
+        .Variable => |name| try duplicateObject(allocator, try lookup(name, environment)),
         .If => |expressions| blk: {
             const condition = try evalExpression(allocator, expressions[0], environment);
+            defer condition.destroy(allocator);
             const result = condition.getValue(.Boolean) orelse return error.UnexpectedIfCondition;
 
             break :blk try evalExpression(allocator, if (result) expressions[1] else expressions[2], environment);
         },
         .And => |expressions| blk: {
             const expr1 = try evalExpression(allocator, expressions[0], environment);
+            defer expr1.destroy(allocator);
             const expr2 = try evalExpression(allocator, expressions[1], environment);
+            defer expr2.destroy(allocator);
             const result1 = expr1.getValue(.Boolean) orelse return error.UnexpectedValue;
             const result2 = expr2.getValue(.Boolean) orelse return error.UnexpectedValue;
 
@@ -58,7 +86,9 @@ pub fn evalExpression(allocator: *std.mem.Allocator, expression: *Expression, en
         },
         .Or => |expressions| blk: {
             const expr1 = try evalExpression(allocator, expressions[0], environment);
+            defer expr1.destroy(allocator);
             const expr2 = try evalExpression(allocator, expressions[1], environment);
+            defer expr2.destroy(allocator);
             const result1 = expr1.getValue(.Boolean) orelse return error.UnexpectedValue;
             const result2 = expr2.getValue(.Boolean) orelse return error.UnexpectedValue;
 

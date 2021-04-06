@@ -8,7 +8,7 @@ pub const LObject = union(enum) {
     Nil,
     // TODO: figure out the differences between *const LObject and *LObject.
     Pair: [2]*LObject,
-    Primitive: Primitive,
+    Primitive: *const Primitive,
 
     pub fn getValue(self: LObject, comptime tag: std.meta.Tag(LObject)) ?std.meta.TagPayload(LObject, tag) {
         return switch (self) {

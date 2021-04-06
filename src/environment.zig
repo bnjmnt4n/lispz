@@ -52,7 +52,7 @@ const Primitives = &[_]Primitive{
 pub fn addPrimitivesToEnvironment(allocator: *std.mem.Allocator, environment: *LObject) !*LObject {
     var env = environment;
 
-    for (Primitives) |primitive| {
+    for (Primitives) |*primitive| {
         var lobject = try allocator.create(LObject);
         lobject.* = .{ .Primitive = primitive };
         env = try bind(allocator, primitive.Name, lobject, env);
