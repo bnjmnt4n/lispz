@@ -118,8 +118,24 @@ pub fn evalExpression(allocator: *std.mem.Allocator, expression: *Expression, en
             defer function.destroy(allocator);
 
             const evaluatedArguments = try allocator.alloc(*LObject, arguments.len);
+            defer allocator.free(evaluatedArguments);
+
+            // TODO: this causes the compiler to consume large amounts of memory.
             for (arguments) |argument, i| {
-                evaluatedArguments[i] = try evalExpression(allocator, argument, environment);
+                const evaluatedArg = evalExpression(allocator, argument, environment);
+                if (evaluatedArg) |arg| {
+                    evaluatedArguments[i] = arg;
+                } else |err| {
+                    for (evaluatedArguments[0 .. i - 1]) |arg| {
+                        arg.destroy(allocator);
+                    }
+                    return err;
+                }
+            }
+            defer {
+                for (evaluatedArguments) |argument| {
+                    argument.destroy(allocator);
+                }
             }
 
             break :blk evalApplication(allocator, function, evaluatedArguments, environment);
