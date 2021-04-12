@@ -49,6 +49,7 @@ fn printList(allocator: *std.mem.Allocator, sexp: LObject) PrinterError![]const 
         },
         else => unreachable,
     };
+    defer allocator.free(cdr);
 
     return try std.fmt.allocPrint(allocator, "{s}{s}", .{ car, cdr });
 }

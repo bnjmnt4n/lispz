@@ -16,8 +16,7 @@ pub fn buildAst(allocator: *std.mem.Allocator, sexp: *LObject) BuildError!*Expre
             expression.* = .{ .Literal = sexp };
         },
         .Symbol => |origName| {
-            var name = try allocator.alloc(u8, origName.len);
-            std.mem.copy(u8, name, origName);
+            var name = try allocator.dupe(u8, origName);
             expression.* = .{ .Variable = name };
         },
         .Pair => try buildAstFromPair(allocator, sexp, expression),
@@ -28,6 +27,7 @@ pub fn buildAst(allocator: *std.mem.Allocator, sexp: *LObject) BuildError!*Expre
 
 fn buildAstFromPair(allocator: *std.mem.Allocator, sexp: *LObject, expression: *Expression) BuildError!void {
     const list = (try sexp.getListSlice(allocator)) orelse return error.UnexpectedValue;
+    defer allocator.free(list);
 
     if (list.len == 0) return error.UnexpectedValue;
 
@@ -69,15 +69,14 @@ fn buildAstFromPair(allocator: *std.mem.Allocator, sexp: *LObject, expression: *
     if (list.len == 3 and std.mem.eql(u8, symbol, "val")) blk: {
         const origName = list[1].getValue(.Symbol) orelse break :blk;
 
-        const name = try allocator.alloc(u8, origName.len);
+        const name = try allocator.dupe(u8, origName);
         errdefer allocator.free(name);
-        std.mem.copy(u8, name, origName);
 
-        const expr= try buildAst(allocator, list[2]);
+        const expr = try buildAst(allocator, list[2]);
         errdefer destroyAst(allocator, expr);
 
         var defExpr = try allocator.create(DefExpression);
-        defExpr.* = .{.Val = .{.Name = name, .Expression = expr}};
+        defExpr.* = .{ .Val = .{ .Name = name, .Expression = expr } };
 
         expression.* = .{ .DefExpression = defExpr };
         return;
@@ -92,7 +91,7 @@ fn buildAstFromPair(allocator: *std.mem.Allocator, sexp: *LObject, expression: *
         errdefer destroyAst(allocator, functionExpr);
         const argumentsExpr = try buildAst(allocator, arguments);
 
-        expression.* = .{.Apply = .{ functionExpr, argumentsExpr }};
+        expression.* = .{ .Apply = .{ functionExpr, argumentsExpr } };
         break :blk;
     }
 
@@ -105,12 +104,12 @@ fn buildAstFromPair(allocator: *std.mem.Allocator, sexp: *LObject, expression: *
     for (list[1..]) |argument, i| {
         arguments[i] = buildAst(allocator, argument) catch |err| {
             // Clear previous nodes when we encounter an error.
-            for (arguments[1..i - 1]) |arg| destroyAst(allocator, arg);
+            for (arguments[1 .. i - 1]) |arg| destroyAst(allocator, arg);
             return err;
         };
     }
 
-    expression.* = .{.Call = .{.Function = function, .Arguments = arguments}};
+    expression.* = .{ .Call = .{ .Function = function, .Arguments = arguments } };
 }
 
 /// Does not destroy any references to `LObject`.
@@ -140,12 +139,13 @@ pub fn destroyAst(allocator: *std.mem.Allocator, expression: *Expression) void {
             for (call.Arguments) |argument| {
                 destroyAst(allocator, argument);
             }
+            allocator.free(call.Arguments);
         },
         .DefExpression => |defExpr| {
             destroyAst(allocator, defExpr.Expression);
             destroyAst(allocator, defExpr.Val.Expression);
             allocator.free(defExpr.Val.Name);
-        }
+        },
     }
 
     allocator.destroy(expression);

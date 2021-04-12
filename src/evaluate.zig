@@ -24,7 +24,10 @@ fn evalDefExpression(allocator: *std.mem.Allocator, defExpr: *DefExpression, env
     return switch (defExpr.*) {
         .Val => |value| blk: {
             const result = try evalExpression(allocator, value.Expression, environment);
-            const newEnvironment = try bind(allocator, value.Name, result, environment);
+            errdefer result.destroy(allocator);
+            var name = try allocator.dupe(u8, value.Name);
+            errdefer allocator.free(name);
+            const newEnvironment = try bind(allocator, name, result, environment);
 
             break :blk .{ result, newEnvironment };
         },
@@ -45,8 +48,7 @@ fn duplicateObject(allocator: *std.mem.Allocator, object: *LObject) std.mem.Allo
         .Fixnum => |num| node.* = .{ .Fixnum = num },
         .Nil => node.* = LObject.Nil,
         .Symbol => |origSymbol| {
-            var symbol = try allocator.alloc(u8, origSymbol.len);
-            std.mem.copy(u8, symbol, origSymbol);
+            var symbol = try allocator.dupe(u8, origSymbol);
             node.* = .{ .Symbol = symbol };
         },
         .Pair => |pair| {
@@ -98,9 +100,12 @@ pub fn evalExpression(allocator: *std.mem.Allocator, expression: *Expression, en
         },
         .Apply => |expressions| blk: {
             const function = try evalExpression(allocator, expressions[0], environment);
+            defer function.destroy(allocator);
             const argumentsList = try evalExpression(allocator, expressions[1], environment);
+            defer argumentsList.destroy(allocator);
             // TODO: figure out error type.
             const argumentsSlice = (try argumentsList.getListSlice(allocator)) orelse return error.UnexpectedValue;
+            defer allocator.free(argumentsSlice);
 
             break :blk evalApplication(allocator, function, argumentsSlice, environment);
         },
@@ -110,6 +115,7 @@ pub fn evalExpression(allocator: *std.mem.Allocator, expression: *Expression, en
                 break :blk environment;
             }
             const function = try evalExpression(allocator, call.Function, environment);
+            defer function.destroy(allocator);
 
             const evaluatedArguments = try allocator.alloc(*LObject, arguments.len);
             for (arguments) |argument, i| {
@@ -131,9 +137,11 @@ pub fn evalApplication(allocator: *std.mem.Allocator, function: *LObject, argume
 
 pub fn bind(allocator: *std.mem.Allocator, name: []const u8, value: *LObject, environment: *LObject) !*LObject {
     var symbol = try allocator.create(LObject);
+    errdefer allocator.destroy(symbol);
     symbol.* = .{ .Symbol = name };
 
     var nameValuePair = try allocator.create(LObject);
+    errdefer allocator.destroy(nameValuePair);
     nameValuePair.* = .{ .Pair = .{ symbol, value } };
 
     var newEnvironment = try allocator.create(LObject);

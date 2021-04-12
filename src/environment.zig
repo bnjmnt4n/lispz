@@ -55,7 +55,8 @@ pub fn addPrimitivesToEnvironment(allocator: *std.mem.Allocator, environment: *L
     for (Primitives) |*primitive| {
         var lobject = try allocator.create(LObject);
         lobject.* = .{ .Primitive = primitive };
-        env = try bind(allocator, primitive.Name, lobject, env);
+        var name = try allocator.dupe(u8, primitive.Name);
+        env = try bind(allocator, name, lobject, env);
     }
 
     return env;

@@ -96,9 +96,8 @@ fn readSymbol(self: *Self) ParserError!*LObject {
     const endIndex = self.index;
 
     const origSymbol = self.input[startIndex..endIndex];
-    var symbol = try self.allocator.alloc(u8, origSymbol.len);
+    var symbol = try self.allocator.dupe(u8, origSymbol);
     errdefer self.allocator.free(symbol);
-    std.mem.copy(u8, symbol, origSymbol);
 
     var node = try self.allocator.create(LObject);
     node.* = .{ .Symbol = symbol };
