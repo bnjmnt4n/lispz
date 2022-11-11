@@ -6,7 +6,7 @@ const isList = @import("utils.zig").isList;
 
 const BuildError = error{UnexpectedValue} || std.mem.Allocator.Error;
 
-pub fn buildAst(allocator: *std.mem.Allocator, sexp: *LObject) BuildError!*Expression {
+pub fn buildAst(allocator: std.mem.Allocator, sexp: *LObject) BuildError!*Expression {
     var expression = try allocator.create(Expression);
     errdefer allocator.destroy(expression);
 
@@ -25,7 +25,7 @@ pub fn buildAst(allocator: *std.mem.Allocator, sexp: *LObject) BuildError!*Expre
     return expression;
 }
 
-fn buildAstFromPair(allocator: *std.mem.Allocator, sexp: *LObject, expression: *Expression) BuildError!void {
+fn buildAstFromPair(allocator: std.mem.Allocator, sexp: *LObject, expression: *Expression) BuildError!void {
     const list = (try sexp.getListSlice(allocator)) orelse return error.UnexpectedValue;
     defer allocator.free(list);
 
@@ -113,7 +113,7 @@ fn buildAstFromPair(allocator: *std.mem.Allocator, sexp: *LObject, expression: *
 }
 
 /// Does not destroy any references to `LObject`.
-pub fn destroyAst(allocator: *std.mem.Allocator, expression: *Expression) void {
+pub fn destroyAst(allocator: std.mem.Allocator, expression: *Expression) void {
     switch (expression.*) {
         .Literal => {},
         .Variable => |name| allocator.free(name),

@@ -4,7 +4,7 @@ const isList = @import("utils.zig").isList;
 
 pub const PrinterError = error{UnexpectedValue} || std.fmt.AllocPrintError;
 
-pub fn print(allocator: *std.mem.Allocator, sexp: LObject) PrinterError![]const u8 {
+pub fn print(allocator: std.mem.Allocator, sexp: LObject) PrinterError![]const u8 {
     return switch (sexp) {
         .Symbol => |symbol| try std.fmt.allocPrint(allocator, "{s}", .{symbol}),
         .Fixnum => |num| try std.fmt.allocPrint(allocator, "{}", .{num}),
@@ -24,7 +24,7 @@ pub fn print(allocator: *std.mem.Allocator, sexp: LObject) PrinterError![]const 
     };
 }
 
-fn printPair(allocator: *std.mem.Allocator, sexp: LObject) PrinterError![]const u8 {
+fn printPair(allocator: std.mem.Allocator, sexp: LObject) PrinterError![]const u8 {
     const pair = sexp.getValue(.Pair).?;
 
     const car = try print(allocator, pair[0].*);
@@ -35,7 +35,7 @@ fn printPair(allocator: *std.mem.Allocator, sexp: LObject) PrinterError![]const 
     return try std.fmt.allocPrint(allocator, "{s} . {s}", .{ car, cdr });
 }
 
-fn printList(allocator: *std.mem.Allocator, sexp: LObject) PrinterError![]const u8 {
+fn printList(allocator: std.mem.Allocator, sexp: LObject) PrinterError![]const u8 {
     const pair = sexp.getValue(.Pair).?;
     const car = try print(allocator, pair[0].*);
     defer allocator.free(car);

@@ -18,10 +18,10 @@ pub fn main() anyerror!void {
         if (leaked) std.debug.print("Memory leak occured.\n", .{});
     }
 
-    var arena = std.heap.ArenaAllocator.init(&gpa.allocator);
+    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
     defer arena.deinit();
 
-    const allocator = &arena.allocator;
+    const allocator = arena.allocator();
 
     var environment = constructEnvironment(allocator) catch |err| {
         std.debug.print("Unable to construct environment.\n", .{});

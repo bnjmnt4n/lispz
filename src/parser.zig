@@ -13,9 +13,9 @@ const Self = @This();
 
 input: []const u8,
 index: u8 = 0,
-allocator: *std.mem.Allocator,
+allocator: std.mem.Allocator,
 
-pub fn init(allocator: *std.mem.Allocator, string: []const u8) Self {
+pub fn init(allocator: std.mem.Allocator, string: []const u8) Self {
     return Self{
         .allocator = allocator,
         .input = string,

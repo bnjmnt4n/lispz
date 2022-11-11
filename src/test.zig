@@ -9,7 +9,7 @@ const print = @import("print.zig").print;
 const constructEnvironment = @import("environment.zig").constructEnvironment;
 
 // TODO: figure out memory leaks.
-fn matches(allocator: *std.mem.Allocator, input: []const u8, expected: []const u8) !void {
+fn matches(allocator: std.mem.Allocator, input: []const u8, expected: []const u8) !void {
     var parser = Parser.init(allocator, input);
     var sexp = try parser.getValue();
     defer sexp.destroy(allocator);
@@ -26,7 +26,7 @@ fn matches(allocator: *std.mem.Allocator, input: []const u8, expected: []const u
     const printedValue = try print(allocator, evalResult[0].*);
     defer allocator.free(printedValue);
 
-    expect(std.mem.eql(u8, printedValue, expected));
+    try expect(std.mem.eql(u8, printedValue, expected));
 }
 
 test "basic evaluation" {

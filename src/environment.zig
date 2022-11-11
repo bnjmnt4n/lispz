@@ -3,7 +3,7 @@ const LObject = @import("values.zig").LObject;
 const Primitive = @import("values.zig").Primitive;
 const bind = @import("evaluate.zig").bind;
 
-fn primitiveList(allocator: *std.mem.Allocator, list: []*LObject, environment: *LObject) !?[2]*LObject {
+fn primitiveList(allocator: std.mem.Allocator, list: []*LObject, environment: *LObject) !?[2]*LObject {
     var i = list.len;
 
     var node = try allocator.create(LObject);
@@ -21,7 +21,7 @@ fn primitiveList(allocator: *std.mem.Allocator, list: []*LObject, environment: *
     return [2]*LObject{ node, environment };
 }
 
-fn primitivePair(allocator: *std.mem.Allocator, list: []*LObject, environment: *LObject) !?[2]*LObject {
+fn primitivePair(allocator: std.mem.Allocator, list: []*LObject, environment: *LObject) !?[2]*LObject {
     if (list.len != 2) return null;
     const car = list[0];
     const cdr = list[1];
@@ -31,7 +31,7 @@ fn primitivePair(allocator: *std.mem.Allocator, list: []*LObject, environment: *
     return [2]*LObject{ node, environment };
 }
 
-fn primitiveAdd(allocator: *std.mem.Allocator, list: []*LObject, environment: *LObject) !?[2]*LObject {
+fn primitiveAdd(allocator: std.mem.Allocator, list: []*LObject, environment: *LObject) !?[2]*LObject {
     if (list.len != 2) return null;
     const a = list[0].getValue(.Fixnum) orelse return null;
     const b = list[1].getValue(.Fixnum) orelse return null;
@@ -49,7 +49,7 @@ const Primitives = &[_]Primitive{
     .{ .Name = "+", .Function = primitiveAdd },
 };
 
-pub fn addPrimitivesToEnvironment(allocator: *std.mem.Allocator, environment: *LObject) !*LObject {
+pub fn addPrimitivesToEnvironment(allocator: std.mem.Allocator, environment: *LObject) !*LObject {
     var env = environment;
 
     for (Primitives) |*primitive| {
@@ -62,7 +62,7 @@ pub fn addPrimitivesToEnvironment(allocator: *std.mem.Allocator, environment: *L
     return env;
 }
 
-pub fn constructEnvironment(allocator: *std.mem.Allocator) !*LObject {
+pub fn constructEnvironment(allocator: std.mem.Allocator) !*LObject {
     var env = try allocator.create(LObject);
     env.* = LObject.Nil;
     env = try addPrimitivesToEnvironment(allocator, env);

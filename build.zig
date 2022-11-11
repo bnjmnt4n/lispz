@@ -12,7 +12,7 @@ pub fn build(b: *Builder) void {
     const mode = b.standardReleaseOptions();
 
     const exe = b.addExecutable("lispz", "src/main.zig");
-    exe.addPackage(.{ .name = "zinput", .path = "dependencies/zinput/src/main.zig" });
+    exe.addPackagePath("zinput", "dependencies/zinput/src/main.zig");
     exe.setTarget(target);
     exe.setBuildMode(mode);
     exe.install();

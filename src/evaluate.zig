@@ -9,7 +9,7 @@ pub const EvaluationError = error{
     UnexpectedValue,
 } || std.mem.Allocator.Error;
 
-pub fn eval(allocator: *std.mem.Allocator, expression: *Expression, environment: *LObject) EvaluationError![2]*LObject {
+pub fn eval(allocator: std.mem.Allocator, expression: *Expression, environment: *LObject) EvaluationError![2]*LObject {
     return switch (expression.*) {
         // Only DefExpressions modify the environment.
         .DefExpression => |defExpr| evalDefExpression(allocator, defExpr, environment),
@@ -20,7 +20,7 @@ pub fn eval(allocator: *std.mem.Allocator, expression: *Expression, environment:
     };
 }
 
-fn evalDefExpression(allocator: *std.mem.Allocator, defExpr: *DefExpression, environment: *LObject) EvaluationError![2]*LObject {
+fn evalDefExpression(allocator: std.mem.Allocator, defExpr: *DefExpression, environment: *LObject) EvaluationError![2]*LObject {
     return switch (defExpr.*) {
         .Val => |value| blk: {
             const result = try evalExpression(allocator, value.Expression, environment);
@@ -39,7 +39,7 @@ fn evalDefExpression(allocator: *std.mem.Allocator, defExpr: *DefExpression, env
     };
 }
 
-fn duplicateObject(allocator: *std.mem.Allocator, object: *LObject) std.mem.Allocator.Error!*LObject {
+fn duplicateObject(allocator: std.mem.Allocator, object: *LObject) std.mem.Allocator.Error!*LObject {
     var node = try allocator.create(LObject);
     errdefer allocator.destroy(node);
 
@@ -63,7 +63,7 @@ fn duplicateObject(allocator: *std.mem.Allocator, object: *LObject) std.mem.Allo
     return node;
 }
 
-pub fn evalExpression(allocator: *std.mem.Allocator, expression: *Expression, environment: *LObject) EvaluationError!*LObject {
+pub fn evalExpression(allocator: std.mem.Allocator, expression: *Expression, environment: *LObject) EvaluationError!*LObject {
     return switch (expression.*) {
         .Literal => |literal| try duplicateObject(allocator, literal),
         .Variable => |name| try duplicateObject(allocator, try lookup(name, environment)),
@@ -144,14 +144,14 @@ pub fn evalExpression(allocator: *std.mem.Allocator, expression: *Expression, en
     };
 }
 
-pub fn evalApplication(allocator: *std.mem.Allocator, function: *LObject, arguments: []*LObject, environment: *LObject) EvaluationError!*LObject {
+pub fn evalApplication(allocator: std.mem.Allocator, function: *LObject, arguments: []*LObject, environment: *LObject) EvaluationError!*LObject {
     return switch (function.*) {
         .Primitive => |primitive| (try primitive.Function(allocator, arguments, environment)).?[0],
         else => error.UnexpectedValue,
     };
 }
 
-pub fn bind(allocator: *std.mem.Allocator, name: []const u8, value: *LObject, environment: *LObject) !*LObject {
+pub fn bind(allocator: std.mem.Allocator, name: []const u8, value: *LObject, environment: *LObject) !*LObject {
     var symbol = try allocator.create(LObject);
     errdefer allocator.destroy(symbol);
     symbol.* = .{ .Symbol = name };

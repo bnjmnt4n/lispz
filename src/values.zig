@@ -17,7 +17,7 @@ pub const LObject = union(enum) {
         };
     }
 
-    pub fn getListSlice(self: LObject, allocator: *std.mem.Allocator) !?[]*LObject {
+    pub fn getListSlice(self: LObject, allocator: std.mem.Allocator) !?[]*LObject {
         const length = getListLength(self) orelse return null;
 
         var slice = try allocator.alloc(*LObject, length);
@@ -34,7 +34,7 @@ pub const LObject = union(enum) {
         return slice;
     }
 
-    pub fn destroy(self: *LObject, allocator: *std.mem.Allocator) void {
+    pub fn destroy(self: *LObject, allocator: std.mem.Allocator) void {
         switch (self.*) {
             .Nil, .Fixnum, .Boolean => {},
             .Symbol => |symbol| allocator.free(symbol),
@@ -52,7 +52,7 @@ pub const LObject = union(enum) {
 // Primitive functions defined within the environment.
 pub const Primitive = struct {
     Name: []const u8,
-    Function: fn (allocator: *std.mem.Allocator, list: []*LObject, environment: *LObject) EvaluationError!?[2]*LObject,
+    Function: *const fn (allocator: std.mem.Allocator, list: []*LObject, environment: *LObject) EvaluationError!?[2]*LObject,
 };
 
 pub const Expression = union(enum) {
