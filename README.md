@@ -4,7 +4,7 @@ A Lisp interpreter written in [Zig][zig], based on the [Writing a Lisp][lisp] se
 
 ## Usage
 
-1. Install [Zig v0.8.0][zig-download].
+1. Install [Zig v0.10.0][zig-download].
 2. Execute the following
 
     ```sh
